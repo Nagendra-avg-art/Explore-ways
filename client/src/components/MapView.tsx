@@ -99,6 +99,12 @@ export const MapView: React.FC<MapViewProps> = ({
     };
   }, []);
 
+  // Auto-pan when user location coordinates change (e.g. Tirupati -> Hyderabad)
+  useEffect(() => {
+    if (!mapInstanceRef.current || !location) return;
+    mapInstanceRef.current.panTo([location.lat, location.lon], { animate: true, duration: 0.8 });
+  }, [location.lat, location.lon]);
+
   // Update Markers & Polyline when dependencies change
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -242,7 +248,7 @@ export const MapView: React.FC<MapViewProps> = ({
             Interactive City Explorer
           </span>
           <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
-            Map of Hyderabad & Nearby Sights
+            Map of {location?.city || 'City'} &amp; Nearby Sights
           </h1>
         </div>
         <div className="flex items-center space-x-2 text-xs text-slate-500">
