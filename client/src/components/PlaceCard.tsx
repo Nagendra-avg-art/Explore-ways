@@ -51,6 +51,18 @@ export const PlaceCard: React.FC<PlaceCardProps> = ({
             <span>{place.rating.toFixed(1)}</span>
             <span className="text-slate-400 font-normal">({(place.reviewCount / 1000).toFixed(1)}k)</span>
           </div>
+
+          {/* Open / Closed Status Pill */}
+          {place.isOpenNow !== undefined && (
+            <div className={`absolute bottom-3 left-3 text-[11px] font-bold px-2.5 py-1 rounded-lg backdrop-blur-xs shadow-xs flex items-center space-x-1.5 ${
+              place.isOpenNow 
+                ? 'bg-emerald-950/85 text-emerald-300' 
+                : 'bg-slate-900/85 text-slate-300'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${place.isOpenNow ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
+              <span>{place.isOpenNow ? 'Open Now' : 'Closed'}</span>
+            </div>
+          )}
         </div>
 
         {/* Card Content */}
@@ -78,6 +90,11 @@ export const PlaceCard: React.FC<PlaceCardProps> = ({
               <Clock className="w-3 h-3 text-slate-500" />
               <span>{place.visitDuration}</span>
             </span>
+            {place.entryFee && (
+              <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/60 font-semibold text-[11px]">
+                <span>🎟️ {place.entryFee.split('/')[0].trim()}</span>
+              </span>
+            )}
           </div>
 
           {/* Recommendation Rationale Callout */}

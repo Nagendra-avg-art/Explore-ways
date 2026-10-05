@@ -1,9 +1,18 @@
 import React, { useState, useMemo } from 'react';
-import { Search, SlidersHorizontal, Compass } from 'lucide-react';
+import { 
+  Search, 
+  SlidersHorizontal, 
+  Compass, 
+  RotateCcw, 
+  Star, 
+  MapPin, 
+  Clock 
+} from 'lucide-react';
 import { DEMO_PLACES } from '../data/demoPlaces';
 import { CategoryPills } from './CategoryPills';
 import { PlaceCard } from './PlaceCard';
 import { CategoryId, Place, SortOption } from '../types/travel';
+import { useLocation } from '../context/LocationContext';
 
 interface ExploreViewProps {
   onViewDetails: (place: Place) => void;
@@ -11,27 +20,115 @@ interface ExploreViewProps {
   onToggleSave: (placeId: string) => void;
 }
 
+type DistanceFilter = 'all' | '5' | '10' | '20';
+type RatingFilter = 'all' | '4.5' | '4.7';
+
+// Haversine formula for dynamic distance calculation
+function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // km
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10;
+}
+
+// Calculate open now status based on local time
+function getIsOpenNow(placeId: string): boolean {
+  const now = new Date();
+  const hour = now.getHours() + now.getMinutes() / 60;
+  const day = now.getDay();
+
+  // Friday check for Chowmahalla
+  if (placeId === 'chowmahalla' && day === 5) return false;
+  // Standard operating hours
+  if (placeId === 'birla-mandir') {
+    return (hour >= 7 && hour <= 12) || (hour >= 15 && hour <= 21);
+  }
+  if (placeId === 'niloufer-cafe') {
+    return hour >= 4 && hour <= 23.5;
+  }
+  if (placeId === 'paradise-biryani') {
+    return hour >= 11.5 && hour <= 23.5;
+  }
+  return hour >= 9.5 && hour <= 18.0;
+}
+
 export const ExploreView: React.FC<ExploreViewProps> = ({
   onViewDetails,
   savedPlaceIds,
   onToggleSave,
 }) => {
+  const { location } = useLocation();
+
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortOption>('recommended');
+  
+  // Multi-criteria filters
+  const [distanceFilter, setDistanceFilter] = useState<DistanceFilter>('all');
+  const [ratingFilter, setRatingFilter] = useState<RatingFilter>('all');
+  const [openNowOnly, setOpenNowOnly] = useState<boolean>(false);
+  const [showFiltersPanel, setShowFiltersPanel] = useState<boolean>(true);
 
-  // Filter and Sort places
+  // Compute active filters count
+  const activeFiltersCount = 
+    (distanceFilter !== 'all' ? 1 : 0) + 
+    (ratingFilter !== 'all' ? 1 : 0) + 
+    (openNowOnly ? 1 : 0) +
+    (selectedCategory !== 'all' ? 1 : 0);
+
+  // Filter and Sort places dynamically
   const processedPlaces = useMemo(() => {
-    let result = DEMO_PLACES.filter((place) => {
-      const matchesCategory = selectedCategory === 'all' || place.category === selectedCategory;
-      const matchesSearch = 
-        searchQuery.trim() === '' ||
-        place.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        place.shortDescription.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        place.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-      return matchesCategory && matchesSearch;
+    let result = DEMO_PLACES.map((place) => {
+      // Recalculate distance dynamically relative to user location
+      const dynamicDist = calculateDistanceKm(location.lat, location.lon, place.lat, place.lon);
+      const isOpen = getIsOpenNow(place.id);
+      return {
+        ...place,
+        distanceKm: dynamicDist,
+        travelTimeMin: Math.max(5, Math.round(dynamicDist * 2.5 + 4)),
+        isOpenNow: isOpen,
+      };
     });
 
+    // Filter: Category
+    if (selectedCategory !== 'all') {
+      result = result.filter((p) => p.category === selectedCategory);
+    }
+
+    // Filter: Search Keyword
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.shortDescription.toLowerCase().includes(q) ||
+          p.tags.some((tag) => tag.toLowerCase().includes(q))
+      );
+    }
+
+    // Filter: Max Distance
+    if (distanceFilter !== 'all') {
+      const maxKm = parseFloat(distanceFilter);
+      result = result.filter((p) => p.distanceKm <= maxKm);
+    }
+
+    // Filter: Minimum Rating
+    if (ratingFilter !== 'all') {
+      const minStars = parseFloat(ratingFilter);
+      result = result.filter((p) => p.rating >= minStars);
+    }
+
+    // Filter: Open Now
+    if (openNowOnly) {
+      result = result.filter((p) => p.isOpenNow === true);
+    }
+
+    // Sorting
     if (sortBy === 'distance') {
       result = [...result].sort((a, b) => a.distanceKm - b.distanceKm);
     } else if (sortBy === 'rating') {
@@ -39,29 +136,53 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
     }
 
     return result;
-  }, [selectedCategory, searchQuery, sortBy]);
+  }, [selectedCategory, searchQuery, distanceFilter, ratingFilter, openNowOnly, sortBy, location]);
+
+  const resetAllFilters = () => {
+    setSelectedCategory('all');
+    setSearchQuery('');
+    setDistanceFilter('all');
+    setRatingFilter('all');
+    setOpenNowOnly(false);
+    setSortBy('recommended');
+  };
 
   return (
     <div className="space-y-8 animate-fadeIn">
       
       {/* Header Banner */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs">
-        <div className="max-w-2xl space-y-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-sky-600">
-            Destination Directory
-          </span>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
-            Explore All Local Destinations
-          </h1>
-          <p className="text-sm text-slate-500">
-            Browse verified landmarks, temples, eateries, and scenic views around Hyderabad. Filter by interest or sort by distance.
-          </p>
+      <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <span className="text-xs font-bold uppercase tracking-wider text-sky-600">
+              Multi-Criteria Search Engine
+            </span>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
+              Explore Local Destinations
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500">
+              Distances calculated relative to <strong>{location.formatted}</strong>.
+            </p>
+          </div>
+
+          <button
+            onClick={() => setShowFiltersPanel((prev) => !prev)}
+            className="self-start sm:self-center inline-flex items-center space-x-2 px-4 py-2.5 rounded-2xl bg-sky-50 hover:bg-sky-100 text-sky-800 text-xs font-bold border border-sky-200 transition-colors cursor-pointer"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-sky-600" />
+            <span>{showFiltersPanel ? 'Hide Filters' : 'Show Filters'}</span>
+            {activeFiltersCount > 0 && (
+              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-sky-600 text-white font-bold">
+                {activeFiltersCount}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Search Bar & Sort Row */}
-        <div className="mt-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           {/* Search Input */}
-          <div className="relative flex-1 flex items-center shadow-2xs rounded-xl bg-slate-50 border border-slate-200 focus-within:bg-white focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-100 transition-all p-1">
+          <div className="relative flex-1 flex items-center shadow-2xs rounded-2xl bg-slate-50 border border-slate-200 focus-within:bg-white focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-100 transition-all p-1">
             <div className="pl-3 text-slate-400">
               <Search className="w-4 h-4 text-sky-600" />
             </div>
@@ -69,13 +190,13 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by name, cuisine, monument, or keyword..."
+              placeholder="Search by keyword, monument, dish, or neighborhood..."
               className="w-full px-3 py-2 text-xs sm:text-sm text-slate-800 placeholder-slate-400 bg-transparent focus:outline-none font-medium"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="mr-2 text-xs font-semibold text-slate-400 hover:text-slate-600 px-2 py-1"
+                className="mr-2 text-xs font-semibold text-slate-400 hover:text-slate-600 px-2 py-1 cursor-pointer"
               >
                 Clear
               </button>
@@ -83,23 +204,124 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
           </div>
 
           {/* Sort Selector */}
-          <div className="flex items-center space-x-2 shrink-0">
-            <div className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 font-medium">
-              <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
-              <span>Sort:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortOption)}
-                aria-label="Sort destinations by"
-                className="bg-transparent font-bold text-slate-900 focus:outline-none cursor-pointer"
-              >
-                <option value="recommended">Recommended</option>
-                <option value="distance">Closest Distance</option>
-                <option value="rating">Highest Rating</option>
-              </select>
-            </div>
+          <div className="flex items-center space-x-1.5 px-3 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600 font-medium shrink-0">
+            <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
+            <span>Sort:</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortOption)}
+              aria-label="Sort destinations"
+              className="bg-transparent font-bold text-slate-900 focus:outline-none cursor-pointer"
+            >
+              <option value="recommended">Recommended</option>
+              <option value="distance">Distance (Nearest)</option>
+              <option value="rating">Rating (Highest)</option>
+            </select>
           </div>
         </div>
+
+        {/* Multi-Criteria Filter Controls Panel */}
+        {showFiltersPanel && (
+          <div className="pt-5 border-t border-slate-100 space-y-4 animate-fadeIn">
+            
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              
+              {/* Filter 1: Distance Radius */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center space-x-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-sky-600" />
+                  <span>Max Distance Radius</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { id: 'all', label: 'Any' },
+                    { id: '5', label: '< 5 km' },
+                    { id: '10', label: '< 10 km' },
+                    { id: '20', label: '< 20 km' },
+                  ].map((dist) => (
+                    <button
+                      key={dist.id}
+                      onClick={() => setDistanceFilter(dist.id as DistanceFilter)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                        distanceFilter === dist.id
+                          ? 'bg-sky-600 text-white border-sky-600 shadow-2xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {dist.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Filter 2: Star Rating */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center space-x-1.5">
+                  <Star className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Minimum Rating</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { id: 'all', label: 'All' },
+                    { id: '4.5', label: '★ 4.5+' },
+                    { id: '4.7', label: '★ 4.7+' },
+                  ].map((rate) => (
+                    <button
+                      key={rate.id}
+                      onClick={() => setRatingFilter(rate.id as RatingFilter)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                        ratingFilter === rate.id
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-2xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {rate.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Filter 3: Open Now Toggle */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center space-x-1.5">
+                  <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Operating Status</span>
+                </label>
+                <div>
+                  <button
+                    onClick={() => setOpenNowOnly((prev) => !prev)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all flex items-center space-x-2 cursor-pointer ${
+                      openNowOnly
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${openNowOnly ? 'bg-white' : 'bg-emerald-500'}`} />
+                    <span>{openNowOnly ? 'Open Now Only (Active)' : 'Open Now Only'}</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Active Filters Summary & Reset */}
+            {activeFiltersCount > 0 && (
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                <span className="text-slate-500">
+                  {activeFiltersCount} filter{activeFiltersCount > 1 ? 's' : ''} active
+                </span>
+                <button
+                  onClick={resetAllFilters}
+                  className="flex items-center space-x-1.5 text-rose-600 hover:text-rose-800 font-semibold cursor-pointer"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reset All Filters</span>
+                </button>
+              </div>
+            )}
+
+          </div>
+        )}
       </div>
 
       {/* Category Filter Pills */}
@@ -138,18 +360,15 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
           <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
             <Compass className="w-6 h-6" />
           </div>
-          <h3 className="font-bold text-slate-900 text-base">No destinations found</h3>
+          <h3 className="font-bold text-slate-900 text-base">No destinations match these criteria</h3>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            We couldn't find any places matching "{searchQuery}". Try selecting another category or resetting the search.
+            Try expanding your distance radius, lowering the rating filter, or turning off the "Open Now" constraint.
           </p>
           <button
-            onClick={() => {
-              setSelectedCategory('all');
-              setSearchQuery('');
-            }}
+            onClick={resetAllFilters}
             className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-semibold cursor-pointer"
           >
-            Clear Filters
+            Reset All Filters
           </button>
         </div>
       )}

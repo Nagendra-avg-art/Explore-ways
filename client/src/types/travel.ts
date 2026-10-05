@@ -48,6 +48,8 @@ export interface Place {
   bestTimeToVisit?: string;
   nearbyFood?: string[];
   transportEstimates?: TransportEstimate[];
+  isOpenNow?: boolean;
+  entryFee?: string;
 }
 
 export type TimeOption = '2h' | '4h' | 'halfDay' | 'fullDay';

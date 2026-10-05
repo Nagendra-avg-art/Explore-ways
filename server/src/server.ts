@@ -17,6 +17,7 @@ app.use(cors({
 app.use(express.json());
 
 import locationRoutes from './routes/locationRoutes.js';
+import placesRoutes from './routes/placesRoutes.js';
 
 // Basic health check endpoint
 app.get('/api/health', (req: Request, res: Response) => {
@@ -31,6 +32,9 @@ app.get('/api/health', (req: Request, res: Response) => {
 
 // Location & Geocoding routes
 app.use('/api/location', locationRoutes);
+
+// Places & Discovery routes
+app.use('/api/places', placesRoutes);
 
 // Start listening
 app.listen(PORT, () => {
