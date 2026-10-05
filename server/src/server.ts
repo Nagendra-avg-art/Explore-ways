@@ -1,0 +1,40 @@
+import express, { Request, Response } from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+
+// Middleware
+app.use(cors({
+  origin: CLIENT_URL,
+  credentials: true
+}));
+app.use(express.json());
+
+// Basic health check endpoint
+app.get('/api/health', (req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'healthy',
+    message: 'Smart Travel Companion API is online and operational',
+    version: '1.0.0',
+    demoMode: process.env.DEMO_MODE === 'true',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Start listening
+app.listen(PORT, () => {
+  console.log(`=========================================`);
+  console.log(`🚀 Smart Travel Companion Backend running`);
+  console.log(`📍 URL: http://localhost:${PORT}`);
+  console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
+  console.log(`🛠️ Mode: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`=========================================`);
+});
+
+export default app;
