@@ -338,7 +338,7 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
                 </div>
                 <div className="mt-2">
                   <span className="text-sm font-black text-slate-900 block">{routeOptions.walk.timeMin} min</span>
-                  <span className="text-[11px] font-bold text-emerald-600">₹0 Free</span>
+                  <span className="text-[11px] font-bold text-emerald-600">Free (₹0)</span>
                 </div>
               </div>
 
@@ -350,7 +350,9 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
                 </div>
                 <div className="mt-2">
                   <span className="text-sm font-black text-slate-900 block">{routeOptions.bus.timeMin} min</span>
-                  <span className="text-[11px] font-bold text-sky-700">{routeOptions.bus.costRange}</span>
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                    Fare: Coming next
+                  </span>
                 </div>
               </div>
 
@@ -362,7 +364,9 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
                 </div>
                 <div className="mt-2">
                   <span className="text-sm font-black text-slate-900 block">{routeOptions.auto.timeMin} min</span>
-                  <span className="text-[11px] font-bold text-amber-800">{routeOptions.auto.costRange}</span>
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                    Fare: Coming next
+                  </span>
                 </div>
               </div>
 
@@ -374,13 +378,15 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
                 </div>
                 <div className="mt-2">
                   <span className="text-sm font-black text-slate-900 block">{routeOptions.cab.timeMin} min</span>
-                  <span className="text-[11px] font-bold text-indigo-700">{routeOptions.cab.costRange}</span>
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                    Fare: Coming next
+                  </span>
                 </div>
               </div>
             </div>
 
             <p className="text-[10px] text-slate-400">
-              Estimated via urban transit model from your {location.isManual ? 'selected hub' : 'active GPS location'}.
+              Estimated travel times via road network from your {location.isManual ? 'selected hub' : 'active GPS location'}. Fares coming in Phase 9.2.
             </p>
           </div>
 

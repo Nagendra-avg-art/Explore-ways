@@ -136,10 +136,10 @@ export interface RouteLeg {
   isRoadNetwork?: boolean;
   maneuvers?: RouteManeuver[];
   modeEstimates: {
-    walk: { timeMin: number; costInr: number; label: string };
-    auto: { timeMin: number; costInr: number; costRange: string; label: string };
-    cab: { timeMin: number; costInr: number; costRange: string; label: string };
-    bus: { timeMin: number; costInr: number; costRange: string; label: string };
+    walk: { timeMin: number; costInr: number; label: string; fareDisplay?: string; distanceKm?: number };
+    auto: { timeMin: number; costInr: number; costRange: string; label: string; fareDisplay?: string; distanceKm?: number };
+    cab: { timeMin: number; costInr: number; costRange: string; label: string; fareDisplay?: string; distanceKm?: number };
+    bus: { timeMin: number; costInr: number; costRange: string; label: string; fareDisplay?: string; distanceKm?: number };
   };
 }
 

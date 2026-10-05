@@ -66,34 +66,28 @@ export function parseVisitDurationMinutes(durationStr?: string): number {
 }
 
 /**
- * Estimates transit time and approximate cost for different transport modes.
- * NOTE: These are heuristic estimates based on urban traffic models (not live telematics).
+ * Calculates honest transit time and transport options for different travel modes.
+ * In Phase 9.1: Fares for motorized transit are marked as "Coming next" (Phase 9.2).
+ * Walking is marked as Free (₹0). Real road network duration is used where available.
  */
-export function estimateTransportModes(distanceKm: number): RouteLeg['modeEstimates'] {
-  // Walking: ~4.5 km/h
-  const walkTimeMin = Math.max(1, Math.round((distanceKm / 4.5) * 60));
+export function estimateTransportModes(distanceKm: number, roadDurationMin?: number): RouteLeg['modeEstimates'] {
+  // Walking: ~4.8 km/h pedestrian walking pace
+  const walkTimeMin = Math.max(1, Math.round((distanceKm / 4.8) * 60));
 
-  // Auto-rickshaw: ~20 km/h in Hyderabad traffic + 3 min pickup buffer. Base: ₹35 (first 1.5km), then ~₹16/km
-  const autoTimeMin = Math.max(4, Math.round((distanceKm / 20) * 60 + 3));
-  const minAuto = Math.round(Math.max(35, 35 + Math.max(0, distanceKm - 1.5) * 14));
-  const maxAuto = Math.round(Math.max(45, 45 + Math.max(0, distanceKm - 1.5) * 18));
-  const avgAutoCost = Math.round((minAuto + maxAuto) / 2);
+  // Cab: Real road network driving duration from OSRM if available, otherwise city traffic estimate
+  const cabTimeMin = roadDurationMin ?? Math.max(3, Math.round((distanceKm / 26) * 60 + 3));
 
-  // Cab: ~24 km/h + 5 min dispatch buffer. Base: ₹70 (first 2km), then ~₹22/km
-  const cabTimeMin = Math.max(5, Math.round((distanceKm / 24) * 60 + 5));
-  const minCab = Math.round(Math.max(70, 70 + Math.max(0, distanceKm - 2) * 20));
-  const maxCab = Math.round(Math.max(90, 90 + Math.max(0, distanceKm - 2) * 25));
-  const avgCabCost = Math.round((minCab + maxCab) / 2);
+  // Auto-rickshaw: City driving pace (~22 km/h) or aligned with OSRM driving duration
+  const autoTimeMin = roadDurationMin ? Math.max(3, Math.round(roadDurationMin * 1.05)) : Math.max(3, Math.round((distanceKm / 22) * 60 + 2));
 
-  // Bus / Metro: Average speed ~16 km/h + 10 min waiting/walking buffer. Flat fare ~₹15-₹35
-  const busTimeMin = Math.max(12, Math.round((distanceKm / 16) * 60 + 10));
-  const busCostInr = distanceKm <= 5 ? 15 : distanceKm <= 12 ? 25 : 35;
+  // Bus / Metro: City transit corridor estimate (~16 km/h corridor + 8 min wait/walk buffer)
+  const busTimeMin = Math.max(8, Math.round((distanceKm / 16) * 60 + 8));
 
   return {
-    walk: { timeMin: walkTimeMin, costInr: 0, label: 'Walking' },
-    auto: { timeMin: autoTimeMin, costInr: avgAutoCost, costRange: `₹${minAuto}–₹${maxAuto}`, label: 'Auto Rickshaw' },
-    cab: { timeMin: cabTimeMin, costInr: avgCabCost, costRange: `₹${minCab}–₹${maxCab}`, label: 'Cab (Ola/Uber)' },
-    bus: { timeMin: busTimeMin, costInr: busCostInr, costRange: `₹${busCostInr}`, label: 'Bus / Metro' },
+    walk: { timeMin: walkTimeMin, costInr: 0, label: 'Walking', fareDisplay: 'Free (₹0)', distanceKm },
+    auto: { timeMin: autoTimeMin, costInr: 0, costRange: 'Coming next', label: 'Auto Rickshaw', fareDisplay: 'Coming next', distanceKm },
+    cab: { timeMin: cabTimeMin, costInr: 0, costRange: 'Coming next', label: 'Cab (Ola/Uber)', fareDisplay: 'Coming next', distanceKm },
+    bus: { timeMin: busTimeMin, costInr: 0, costRange: 'Coming next', label: 'Bus / Metro', fareDisplay: 'Coming next', distanceKm },
   };
 }
 
@@ -104,7 +98,7 @@ export function estimateTransportModes(distanceKm: number): RouteLeg['modeEstima
  * - Leg 1: Stop 1 -> Stop 2
  * - ...
  * - Total distance (sum of all leg distances)
- * - Estimated total travel time, transport cost, and visit time
+ * - Estimated total travel time and visit time based on chosen mode
  */
 export function calculateTripRoute(
   origin: { lat: number; lon: number; label: string; isActualGps: boolean },
@@ -143,33 +137,21 @@ export function calculateTripRoute(
     const legDistance = calculateHaversineDistanceKm(currentLat, currentLon, stop.lat, stop.lon);
     const modeEst = estimateTransportModes(legDistance);
     
-    // Pick travel time and cost based on user preferred mode
+    // Pick travel time based on user preferred mode
     let legTravelTime: number;
-    let legCost: number;
-
     switch (preferredMode) {
       case 'walk':
         legTravelTime = modeEst.walk.timeMin;
-        legCost = 0;
         break;
       case 'cab':
         legTravelTime = modeEst.cab.timeMin;
-        legCost = modeEst.cab.costInr;
         break;
       case 'bus':
         legTravelTime = modeEst.bus.timeMin;
-        legCost = modeEst.bus.costInr;
         break;
       case 'auto':
       default:
-        // For very short hops under 600m, walking is practical, otherwise auto
-        if (legDistance <= 0.6) {
-          legTravelTime = modeEst.walk.timeMin;
-          legCost = 0;
-        } else {
-          legTravelTime = modeEst.auto.timeMin;
-          legCost = modeEst.auto.costInr;
-        }
+        legTravelTime = modeEst.auto.timeMin;
         break;
     }
 
@@ -188,7 +170,6 @@ export function calculateTripRoute(
 
     totalDistanceKm += legDistance;
     totalTravelTimeMin += legTravelTime;
-    totalTransportCostInr += legCost;
     totalVisitTimeMin += parseVisitDurationMinutes(stop.visitDuration);
 
     currentLat = stop.lat;

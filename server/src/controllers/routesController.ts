@@ -106,11 +106,17 @@ export const getDirections = async (req: Request, res: Response) => {
         );
 
         const totalDistanceKm = Math.round((route.distance / 1000) * 10) / 10;
-        const totalDurationMin = Math.max(1, Math.round(route.duration / 60));
+        const isWalking = profile === 'walking';
+        // For walking, calculate genuine pedestrian duration (~4.8 km/h) over the real road network
+        const totalDurationMin = isWalking
+          ? Math.max(1, Math.round((totalDistanceKm / 4.8) * 60))
+          : Math.max(1, Math.round(route.duration / 60));
 
         const legs = (route.legs || []).map((leg: any, idx: number) => {
           const legDistanceKm = Math.round((leg.distance / 1000) * 10) / 10;
-          const legDurationMin = Math.max(1, Math.round(leg.duration / 60));
+          const legDurationMin = isWalking
+            ? Math.max(1, Math.round((legDistanceKm / 4.8) * 60))
+            : Math.max(1, Math.round(leg.duration / 60));
           
           // Extract turn maneuvers
           const maneuvers = (leg.steps || []).map((step: any) => {

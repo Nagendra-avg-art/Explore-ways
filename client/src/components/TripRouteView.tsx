@@ -25,6 +25,7 @@ import { useTrip } from '../context/TripContext';
 import { usePreferences } from '../context/PreferencesContext';
 import { Place, TransportMode } from '../types/travel';
 import { formatDistanceKm } from '../services/routingService';
+import { TransportComparisonCard } from './TransportComparisonCard';
 
 interface TripRouteViewProps {
   onViewPlaceDetails: (place: Place) => void;
@@ -55,6 +56,7 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
   const { preferences } = usePreferences();
   const [expandedLegIndex, setExpandedLegIndex] = useState<number | null>(null);
   const [expandedManeuversLegIndex, setExpandedManeuversLegIndex] = useState<number | null>(null);
+  const [selectedLegIndexForComparison, setSelectedLegIndexForComparison] = useState<number>(0);
 
   if (tripPlaces.length === 0) {
     return (
@@ -205,13 +207,22 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
             <span className="text-[10px] text-slate-400 mt-1">Travel + visits</span>
           </div>
 
-          {/* Tile 4: Estimated Transport Cost */}
+          {/* Tile 4: Transit Fare Status */}
           <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Transit Cost</span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Transit Fare</span>
             <div className="mt-1 flex items-baseline space-x-1">
-              <span className="text-2xl font-black text-emerald-700">₹{tripRoute.totalEstimatedTransportCostInr}</span>
+              {preferredMode === 'walk' ? (
+                <>
+                  <span className="text-2xl font-black text-emerald-700">₹0</span>
+                  <span className="text-xs font-bold text-emerald-600">Free</span>
+                </>
+              ) : (
+                <span className="text-xs font-extrabold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-lg border border-amber-200">
+                  Coming next
+                </span>
+              )}
             </div>
-            <span className="text-[10px] text-slate-400 mt-1">Estimated fare</span>
+            <span className="text-[10px] text-slate-400 mt-1">Phase 9.2 fare estimation</span>
           </div>
 
           {/* Tile 5: Total Stops */}
@@ -335,6 +346,54 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
         </div>
       </div>
 
+      {/* Phase 9.1: Featured Transport Mode Comparison Card */}
+      {(() => {
+        const defaultLegIndex = tripRoute.legs.length > 1 ? 1 : 0;
+        const activeIdx = Math.min(
+          selectedLegIndexForComparison ?? defaultLegIndex,
+          Math.max(0, tripRoute.legs.length - 1)
+        );
+        const compLeg = tripRoute.legs[activeIdx] || tripRoute.legs[0];
+
+        if (!compLeg) return null;
+
+        return (
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 shadow-xs space-y-4 animate-fadeIn">
+            {tripRoute.legs.length > 1 && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                <span className="text-xs font-bold text-slate-700">
+                  Select itinerary leg to inspect:
+                </span>
+                <select
+                  value={activeIdx}
+                  onChange={(e) => setSelectedLegIndexForComparison(Number(e.target.value))}
+                  className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 cursor-pointer shadow-2xs focus:ring-2 focus:ring-sky-500 outline-none"
+                >
+                  {tripRoute.legs.map((leg, lIdx) => (
+                    <option key={lIdx} value={lIdx}>
+                      Leg {lIdx + 1}: {leg.fromName} → {leg.toName} ({leg.distanceKm} km)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <TransportComparisonCard
+              fromName={compLeg.fromName}
+              toName={compLeg.toName}
+              distanceKm={compLeg.distanceKm}
+              isRoadNetwork={compLeg.isRoadNetwork}
+              selectedMode={preferredMode}
+              onSelectMode={(mode) => setPreferredMode(mode)}
+              walkTimeMin={compLeg.modeEstimates.walk.timeMin}
+              autoTimeMin={compLeg.modeEstimates.auto.timeMin}
+              cabTimeMin={compLeg.modeEstimates.cab.timeMin}
+              busTimeMin={compLeg.modeEstimates.bus.timeMin}
+            />
+          </div>
+        );
+      })()}
+
       {/* Sequential Route Timeline */}
       <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-6">
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -422,48 +481,76 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
                     </div>
 
                     {/* Mode Breakdown Strip */}
-                    <div className="flex items-center space-x-3 text-[11px] text-slate-600 overflow-x-auto pt-1">
-                      <span className={`flex items-center space-x-1 px-2 py-1 rounded-lg ${preferredMode === 'walk' ? 'bg-white font-bold text-emerald-800 shadow-2xs' : ''}`}>
-                        <Footprints className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Walk: {leg.modeEstimates.walk.timeMin}m (₹0)</span>
-                      </span>
-                      <span className={`flex items-center space-x-1 px-2 py-1 rounded-lg ${preferredMode === 'auto' ? 'bg-white font-bold text-amber-900 shadow-2xs' : ''}`}>
+                    <div className="flex items-center space-x-2 text-[11px] text-slate-600 overflow-x-auto pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setPreferredMode('walk')}
+                        className={`flex items-center space-x-1 px-2.5 py-1 rounded-xl transition-all cursor-pointer ${
+                          preferredMode === 'walk'
+                            ? 'bg-emerald-600 text-white font-extrabold shadow-2xs'
+                            : 'bg-white hover:bg-slate-100 border border-slate-200'
+                        }`}
+                      >
+                        <Footprints className="w-3.5 h-3.5" />
+                        <span>Walk: {leg.modeEstimates.walk.timeMin}m (Free)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setPreferredMode('auto')}
+                        className={`flex items-center space-x-1 px-2.5 py-1 rounded-xl transition-all cursor-pointer ${
+                          preferredMode === 'auto'
+                            ? 'bg-amber-600 text-white font-extrabold shadow-2xs'
+                            : 'bg-white hover:bg-slate-100 border border-slate-200'
+                        }`}
+                      >
                         <span>🛺</span>
-                        <span>Auto: {leg.modeEstimates.auto.timeMin}m ({leg.modeEstimates.auto.costRange})</span>
-                      </span>
-                      <span className={`flex items-center space-x-1 px-2 py-1 rounded-lg ${preferredMode === 'cab' ? 'bg-white font-bold text-indigo-900 shadow-2xs' : ''}`}>
-                        <Car className="w-3.5 h-3.5 text-indigo-600" />
-                        <span>Cab: {leg.modeEstimates.cab.timeMin}m ({leg.modeEstimates.cab.costRange})</span>
-                      </span>
-                      <span className={`flex items-center space-x-1 px-2 py-1 rounded-lg ${preferredMode === 'bus' ? 'bg-white font-bold text-sky-900 shadow-2xs' : ''}`}>
-                        <Bus className="w-3.5 h-3.5 text-sky-600" />
-                        <span>Bus: {leg.modeEstimates.bus.timeMin}m ({leg.modeEstimates.bus.costRange})</span>
-                      </span>
+                        <span>Auto: {leg.modeEstimates.auto.timeMin}m</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setPreferredMode('cab')}
+                        className={`flex items-center space-x-1 px-2.5 py-1 rounded-xl transition-all cursor-pointer ${
+                          preferredMode === 'cab'
+                            ? 'bg-indigo-600 text-white font-extrabold shadow-2xs'
+                            : 'bg-white hover:bg-slate-100 border border-slate-200'
+                        }`}
+                      >
+                        <Car className="w-3.5 h-3.5" />
+                        <span>Cab: {leg.modeEstimates.cab.timeMin}m</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setPreferredMode('bus')}
+                        className={`flex items-center space-x-1 px-2.5 py-1 rounded-xl transition-all cursor-pointer ${
+                          preferredMode === 'bus'
+                            ? 'bg-sky-600 text-white font-extrabold shadow-2xs'
+                            : 'bg-white hover:bg-slate-100 border border-slate-200'
+                        }`}
+                      >
+                        <Bus className="w-3.5 h-3.5" />
+                        <span>Bus: {leg.modeEstimates.bus.timeMin}m</span>
+                      </button>
                     </div>
 
-                    {/* Expanded Transit Comparison Table */}
+                    {/* Expanded Transit Comparison Table / Card */}
                     {isExpanded && (
-                      <div className="pt-2 border-t border-sky-200/60 grid grid-cols-2 sm:grid-cols-4 gap-2 animate-fadeIn">
-                        <div className="p-2.5 rounded-xl bg-white border border-slate-200 text-center">
-                          <span className="text-[10px] font-bold text-slate-400 block uppercase">🚶 Walking</span>
-                          <span className="font-extrabold text-slate-800 text-xs block">{leg.modeEstimates.walk.timeMin} min</span>
-                          <span className="text-[11px] font-bold text-emerald-600">₹0 Free</span>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-white border border-slate-200 text-center">
-                          <span className="text-[10px] font-bold text-slate-400 block uppercase">🛺 Auto Rickshaw</span>
-                          <span className="font-extrabold text-slate-800 text-xs block">{leg.modeEstimates.auto.timeMin} min</span>
-                          <span className="text-[11px] font-bold text-amber-700">{leg.modeEstimates.auto.costRange}</span>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-white border border-slate-200 text-center">
-                          <span className="text-[10px] font-bold text-slate-400 block uppercase">🚕 Cab / Taxi</span>
-                          <span className="font-extrabold text-slate-800 text-xs block">{leg.modeEstimates.cab.timeMin} min</span>
-                          <span className="text-[11px] font-bold text-indigo-700">{leg.modeEstimates.cab.costRange}</span>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-white border border-slate-200 text-center">
-                          <span className="text-[10px] font-bold text-slate-400 block uppercase">🚌 Bus / Metro</span>
-                          <span className="font-extrabold text-slate-800 text-xs block">{leg.modeEstimates.bus.timeMin} min</span>
-                          <span className="text-[11px] font-bold text-sky-700">{leg.modeEstimates.bus.costRange}</span>
-                        </div>
+                      <div className="pt-2 border-t border-sky-200/60 animate-fadeIn">
+                        <TransportComparisonCard
+                          hideHeader
+                          fromName={leg.fromName}
+                          toName={leg.toName}
+                          distanceKm={leg.distanceKm}
+                          isRoadNetwork={leg.isRoadNetwork}
+                          selectedMode={preferredMode}
+                          onSelectMode={(mode) => setPreferredMode(mode)}
+                          walkTimeMin={leg.modeEstimates.walk.timeMin}
+                          autoTimeMin={leg.modeEstimates.auto.timeMin}
+                          cabTimeMin={leg.modeEstimates.cab.timeMin}
+                          busTimeMin={leg.modeEstimates.bus.timeMin}
+                        />
                       </div>
                     )}
 

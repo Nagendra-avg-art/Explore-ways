@@ -6,7 +6,8 @@ import { usePlaces } from './PlacesContext';
 import { 
   calculateTripRoute, 
   optimizeRouteNearestNeighbor,
-  fetchRealRoadDirections 
+  fetchRealRoadDirections,
+  estimateTransportModes
 } from '../services/routingService';
 
 interface TripContextType {
@@ -146,22 +147,43 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const enhancedLegs = base.legs.map((leg, idx) => {
         const roadLeg = roadGeometry.legs?.find((l) => l.legIndex === idx);
         if (roadLeg) {
+          const modeEst = estimateTransportModes(roadLeg.distanceKm, roadLeg.durationMin);
+          let legTravelTime: number;
+          switch (preferredMode) {
+            case 'walk':
+              legTravelTime = modeEst.walk.timeMin;
+              break;
+            case 'cab':
+              legTravelTime = roadLeg.durationMin;
+              break;
+            case 'bus':
+              legTravelTime = modeEst.bus.timeMin;
+              break;
+            case 'auto':
+            default:
+              legTravelTime = modeEst.auto.timeMin;
+              break;
+          }
+
           return {
             ...leg,
             distanceKm: roadLeg.distanceKm,
-            estimatedTravelTimeMin: roadLeg.durationMin,
+            estimatedTravelTimeMin: legTravelTime,
             isRoadNetwork: true,
             maneuvers: roadLeg.maneuvers,
+            modeEstimates: modeEst,
           };
         }
         return leg;
       });
 
+      const totalTravelTime = enhancedLegs.reduce((acc, l) => acc + l.estimatedTravelTimeMin, 0);
+
       return {
         ...base,
         totalDistanceKm: roadGeometry.totalDistanceKm ?? base.totalDistanceKm,
-        totalTravelTimeMin: roadGeometry.totalDurationMin ?? base.totalTravelTimeMin,
-        totalEstimatedDurationMin: (roadGeometry.totalDurationMin ?? base.totalTravelTimeMin) + base.totalVisitTimeMin,
+        totalTravelTimeMin: totalTravelTime,
+        totalEstimatedDurationMin: totalTravelTime + base.totalVisitTimeMin,
         legs: enhancedLegs,
         routeCoordinates: roadGeometry.routeCoordinates,
         isRoadNetwork: roadGeometry.isRoadNetwork,

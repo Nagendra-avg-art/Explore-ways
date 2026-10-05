@@ -34,7 +34,15 @@ export const MapView: React.FC<MapViewProps> = ({
   initialSelectedPlaceId,
 }) => {
   const { location } = useLocation();
-  const { tripPlaces, tripRoute, isOptimized, optimizeTripRoute, distanceSavedKm } = useTrip();
+  const { 
+    tripPlaces, 
+    tripRoute, 
+    isOptimized, 
+    optimizeTripRoute, 
+    distanceSavedKm,
+    preferredMode,
+    setPreferredMode
+  } = useTrip();
 
   const activePlaces = React.useMemo(() => {
     return places && places.length > 0 ? places : DEMO_PLACES;
@@ -327,9 +335,37 @@ export const MapView: React.FC<MapViewProps> = ({
                     {tripPlaces.length} Stops · {tripRoute.totalDistanceKm} km
                   </h4>
                   <span className="text-[10px] text-slate-500 block">
-                    ~{tripRoute.totalTravelTimeMin}m via {tripRoute.preferredMode.toUpperCase()} · ~₹{tripRoute.totalEstimatedTransportCostInr} fare
+                    ~{tripRoute.totalTravelTimeMin}m via {preferredMode === 'walk' ? 'Walking' : preferredMode === 'cab' ? 'Cab' : preferredMode === 'bus' ? 'Bus / Metro' : 'Auto'} · Fare: {preferredMode === 'walk' ? 'Free (₹0)' : 'Coming next'}
                   </span>
                 </div>
+              </div>
+
+              {/* Interactive Quick Mode Switcher */}
+              <div className="flex items-center space-x-1 pt-2 mt-2 border-t border-slate-100">
+                <span className="text-[10px] font-bold text-slate-400 mr-0.5">Mode:</span>
+                {([
+                  { id: 'walk' as const, label: 'Walk', icon: '🚶' },
+                  { id: 'auto' as const, label: 'Auto', icon: '🛺' },
+                  { id: 'cab' as const, label: 'Cab', icon: '🚕' },
+                  { id: 'bus' as const, label: 'Bus', icon: '🚌' },
+                ]).map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPreferredMode(m.id);
+                    }}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center space-x-0.5 ${
+                      preferredMode === m.id
+                        ? 'bg-sky-600 text-white shadow-2xs font-extrabold'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>{m.icon}</span>
+                    <span>{m.label}</span>
+                  </button>
+                ))}
               </div>
 
               {isOptimized ? (
