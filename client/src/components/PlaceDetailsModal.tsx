@@ -9,7 +9,8 @@ import {
   Sparkles, 
   Utensils, 
   Car, 
-  CalendarCheck
+  CalendarCheck,
+  Map as MapIcon
 } from 'lucide-react';
 import { Place } from '../types/travel';
 
@@ -19,6 +20,7 @@ interface PlaceDetailsModalProps {
   onClose: () => void;
   isSaved?: boolean;
   onToggleSave?: (placeId: string) => void;
+  onViewOnMap?: (place: Place) => void;
 }
 
 export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
@@ -27,6 +29,7 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
   onClose,
   isSaved = false,
   onToggleSave,
+  onViewOnMap,
 }) => {
   // Close on Escape key press & prevent background scroll
   useEffect(() => {
@@ -218,17 +221,32 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
         {/* ============================================================== */}
         {/* MODAL FOOTER ACTIONS */}
         {/* ============================================================== */}
-        <div className="p-4 sm:p-6 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
-          <button
-            onClick={onClose}
-            className="px-5 py-3 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
-          >
-            Close
-          </button>
+        <div className="p-4 sm:p-6 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2.5 shrink-0">
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-3 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              Close
+            </button>
+
+            {onViewOnMap && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onViewOnMap(place);
+                }}
+                className="px-4 py-3 rounded-xl bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-800 text-xs font-bold transition-colors cursor-pointer flex items-center space-x-1.5"
+              >
+                <MapIcon className="w-3.5 h-3.5 text-sky-600" />
+                <span>View on Map</span>
+              </button>
+            )}
+          </div>
 
           <button
             onClick={() => onToggleSave?.(place.id)}
-            className={`flex-1 max-w-xs py-3 px-5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md flex items-center justify-center space-x-2 ${
+            className={`flex-1 sm:flex-initial sm:min-w-[170px] py-3 px-5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md flex items-center justify-center space-x-2 ${
               isSaved
                 ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
                 : 'bg-orange-500 hover:bg-orange-600 text-white shadow-orange-500/20'

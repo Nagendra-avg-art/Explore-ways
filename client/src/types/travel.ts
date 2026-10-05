@@ -37,6 +37,8 @@ export interface Place {
   distanceKm: number;
   travelTimeMin: number;
   visitDuration: string;
+  lat: number;
+  lon: number;
   imageUrl: string;
   shortDescription: string;
   fullDescription?: string;
