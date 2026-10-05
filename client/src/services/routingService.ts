@@ -65,29 +65,60 @@ export function parseVisitDurationMinutes(durationStr?: string): number {
   return 90;
 }
 
+import { 
+  computeTransportTimeDetails, 
+  buildRouteTransportComparison 
+} from './transportTimeService';
+
 /**
  * Calculates honest transit time and transport options for different travel modes.
- * In Phase 9.1: Fares for motorized transit are marked as "Coming next" (Phase 9.2).
- * Walking is marked as Free (₹0). Real road network duration is used where available.
+ * In Phase 9.2: Mode-specific travel times are calculated transparently with realistic ranges.
+ * Walking is marked as Free (₹0) along real road distance.
+ * Auto and Cab provide realistic urban variance ranges.
+ * Bus / Metro is marked as unavailable since genuine transit schedule feeds are not yet connected.
  */
 export function estimateTransportModes(distanceKm: number, roadDurationMin?: number): RouteLeg['modeEstimates'] {
-  // Walking: ~4.8 km/h pedestrian walking pace
-  const walkTimeMin = Math.max(1, Math.round((distanceKm / 4.8) * 60));
-
-  // Cab: Real road network driving duration from OSRM if available, otherwise city traffic estimate
-  const cabTimeMin = roadDurationMin ?? Math.max(3, Math.round((distanceKm / 26) * 60 + 3));
-
-  // Auto-rickshaw: City driving pace (~22 km/h) or aligned with OSRM driving duration
-  const autoTimeMin = roadDurationMin ? Math.max(3, Math.round(roadDurationMin * 1.05)) : Math.max(3, Math.round((distanceKm / 22) * 60 + 2));
-
-  // Bus / Metro: City transit corridor estimate (~16 km/h corridor + 8 min wait/walk buffer)
-  const busTimeMin = Math.max(8, Math.round((distanceKm / 16) * 60 + 8));
+  const details = computeTransportTimeDetails(distanceKm, roadDurationMin, !!roadDurationMin);
 
   return {
-    walk: { timeMin: walkTimeMin, costInr: 0, label: 'Walking', fareDisplay: 'Free (₹0)', distanceKm },
-    auto: { timeMin: autoTimeMin, costInr: 0, costRange: 'Coming next', label: 'Auto Rickshaw', fareDisplay: 'Coming next', distanceKm },
-    cab: { timeMin: cabTimeMin, costInr: 0, costRange: 'Coming next', label: 'Cab (Ola/Uber)', fareDisplay: 'Coming next', distanceKm },
-    bus: { timeMin: busTimeMin, costInr: 0, costRange: 'Coming next', label: 'Bus / Metro', fareDisplay: 'Coming next', distanceKm },
+    walk: {
+      timeMin: details.walk.travelTimeMin || 1,
+      costInr: 0,
+      label: 'Walking',
+      fareDisplay: 'Free (₹0)',
+      distanceKm: details.walk.distanceKm || distanceKm,
+      statusLabel: details.walk.statusLabel,
+    },
+    auto: {
+      timeMin: details.auto.travelTimeMin || 5,
+      costInr: 0,
+      costRange: 'Coming next',
+      label: 'Auto Rickshaw',
+      fareDisplay: 'Coming next',
+      distanceKm: details.auto.distanceKm || distanceKm,
+      timeDisplay: details.auto.travelTimeDisplay,
+      statusLabel: details.auto.statusLabel,
+    },
+    cab: {
+      timeMin: details.cab.travelTimeMin || 5,
+      costInr: 0,
+      costRange: 'Coming next',
+      label: 'Cab (Ola/Uber)',
+      fareDisplay: 'Coming next',
+      distanceKm: details.cab.distanceKm || distanceKm,
+      timeDisplay: details.cab.travelTimeDisplay,
+      statusLabel: details.cab.statusLabel,
+    },
+    bus: {
+      timeMin: 0,
+      costInr: 0,
+      costRange: 'Unavailable',
+      label: 'Bus / Metro',
+      fareDisplay: 'Unavailable',
+      distanceKm: undefined,
+      timeDisplay: 'Unavailable',
+      statusLabel: 'Not available',
+    },
   };
 }
 
@@ -120,6 +151,7 @@ export function calculateTripRoute(
       totalEstimatedTransportCostInr: 0,
       isOptimized: false,
       distanceSavedKm: 0,
+      selectedModeTimeDisplay: '0 min',
     };
   }
 
@@ -136,6 +168,7 @@ export function calculateTripRoute(
   stops.forEach((stop, index) => {
     const legDistance = calculateHaversineDistanceKm(currentLat, currentLon, stop.lat, stop.lon);
     const modeEst = estimateTransportModes(legDistance);
+    const transportComp = buildRouteTransportComparison(currentName, stop.name, legDistance, false);
     
     // Pick travel time based on user preferred mode
     let legTravelTime: number;
@@ -147,7 +180,8 @@ export function calculateTripRoute(
         legTravelTime = modeEst.cab.timeMin;
         break;
       case 'bus':
-        legTravelTime = modeEst.bus.timeMin;
+        // Fallback to auto travel time for itinerary planning buffer
+        legTravelTime = modeEst.auto.timeMin;
         break;
       case 'auto':
       default:
@@ -165,6 +199,7 @@ export function calculateTripRoute(
       toLon: stop.lon,
       distanceKm: legDistance,
       estimatedTravelTimeMin: legTravelTime,
+      transportComparison: transportComp,
       modeEstimates: modeEst,
     });
 
@@ -176,6 +211,16 @@ export function calculateTripRoute(
     currentLon = stop.lon;
     currentName = stop.name;
   });
+
+  // Selected mode user-facing time display
+  let selectedModeTimeDisplay: string;
+  if (preferredMode === 'bus') {
+    selectedModeTimeDisplay = 'Unavailable';
+  } else if (legs.length === 1 && legs[0].transportComparison) {
+    selectedModeTimeDisplay = legs[0].transportComparison.modes[preferredMode].travelTimeDisplay;
+  } else {
+    selectedModeTimeDisplay = `${totalTravelTimeMin} min`;
+  }
 
   return {
     origin,
@@ -189,6 +234,7 @@ export function calculateTripRoute(
     totalEstimatedTransportCostInr: totalTransportCostInr,
     isOptimized,
     distanceSavedKm: Math.round(distanceSavedKm * 10) / 10,
+    selectedModeTimeDisplay,
   };
 }
 

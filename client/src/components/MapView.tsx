@@ -335,7 +335,15 @@ export const MapView: React.FC<MapViewProps> = ({
                     {tripPlaces.length} Stops · {tripRoute.totalDistanceKm} km
                   </h4>
                   <span className="text-[10px] text-slate-500 block">
-                    ~{tripRoute.totalTravelTimeMin}m via {preferredMode === 'walk' ? 'Walking' : preferredMode === 'cab' ? 'Cab' : preferredMode === 'bus' ? 'Bus / Metro' : 'Auto'} · Fare: {preferredMode === 'walk' ? 'Free (₹0)' : 'Coming next'}
+                    {preferredMode === 'bus'
+                      ? '🚌 Bus / Metro: Route unavailable (Not available)'
+                      : `~${tripRoute.selectedModeTimeDisplay || `${tripRoute.totalTravelTimeMin} min`} via ${
+                          preferredMode === 'walk'
+                            ? 'Walking (Road route)'
+                            : preferredMode === 'cab'
+                            ? 'Cab (Estimated)'
+                            : 'Auto (Estimated)'
+                        }`}
                   </span>
                 </div>
               </div>

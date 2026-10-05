@@ -1,6 +1,7 @@
 import React from 'react';
-import { Check, Footprints, Bus, Car, ArrowRight, Info, ShieldCheck } from 'lucide-react';
+import { Check, Footprints, Bus, Car, ArrowRight, Info, ShieldCheck, AlertCircle } from 'lucide-react';
 import { TransportMode } from '../types/travel';
+import { computeTransportTimeDetails } from '../services/transportTimeService';
 
 export interface TransportComparisonCardProps {
   fromName: string;
@@ -9,11 +10,7 @@ export interface TransportComparisonCardProps {
   isRoadNetwork?: boolean;
   selectedMode: TransportMode;
   onSelectMode: (mode: TransportMode) => void;
-  // Mode travel times
-  walkTimeMin?: number;
-  autoTimeMin?: number;
-  cabTimeMin?: number;
-  busTimeMin?: number;
+  roadDrivingTimeMin?: number;
   className?: string;
   hideHeader?: boolean;
 }
@@ -22,73 +19,40 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
   fromName,
   toName,
   distanceKm,
-  isRoadNetwork = false,
+  isRoadNetwork = true,
   selectedMode,
   onSelectMode,
-  walkTimeMin,
-  autoTimeMin,
-  cabTimeMin,
-  busTimeMin,
+  roadDrivingTimeMin,
   className = '',
   hideHeader = false,
 }) => {
-  // Accurate calculations based on real road distance / duration
-  const effectiveWalkTime = walkTimeMin ?? Math.max(1, Math.round((distanceKm / 4.8) * 60));
-  const effectiveCabTime = cabTimeMin ?? Math.max(3, Math.round((distanceKm / 26) * 60 + 3));
-  const effectiveAutoTime = autoTimeMin ?? Math.max(3, Math.round((distanceKm / 22) * 60 + 2));
-  const effectiveBusTime = busTimeMin ?? Math.max(8, Math.round((distanceKm / 16) * 60 + 8));
+  // Compute honest mode-by-mode details from our dedicated Phase 9.2 transport time service
+  const modeDetails = computeTransportTimeDetails(distanceKm, roadDrivingTimeMin, isRoadNetwork);
 
-  const modes = [
+  const modeCards = [
     {
-      id: 'walk' as TransportMode,
-      title: 'Walking',
-      iconEmoji: '🚶',
+      ...modeDetails.walk,
       iconComponent: Footprints,
-      badge: 'Pedestrian',
-      badgeColor: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-      travelTimeMin: effectiveWalkTime,
-      distanceDisplay: `${distanceKm.toFixed(1)} km`,
-      fareDisplay: 'Free (₹0)',
-      isFareAvailable: true,
-      description: 'Zero emissions · Scenic walk',
+      themeColor: 'emerald',
+      statusBadgeColor: 'bg-emerald-50 text-emerald-800 border-emerald-200',
     },
     {
-      id: 'bus' as TransportMode,
-      title: 'Bus / Metro',
-      iconEmoji: '🚌',
-      iconComponent: Bus,
-      badge: 'Public Transit',
-      badgeColor: 'bg-sky-50 text-sky-800 border-sky-200',
-      travelTimeMin: effectiveBusTime,
-      distanceDisplay: `${distanceKm.toFixed(1)} km`,
-      fareDisplay: 'Coming next',
-      isFareAvailable: false,
-      description: 'Transit corridor estimate',
-    },
-    {
-      id: 'auto' as TransportMode,
-      title: 'Auto Rickshaw',
+      ...modeDetails.auto,
       iconEmoji: '🛺',
-      badge: 'City Transit',
-      badgeColor: 'bg-amber-50 text-amber-900 border-amber-200',
-      travelTimeMin: effectiveAutoTime,
-      distanceDisplay: `${distanceKm.toFixed(1)} km`,
-      fareDisplay: 'Coming next',
-      isFareAvailable: false,
-      description: 'Point-to-point city auto',
+      themeColor: 'amber',
+      statusBadgeColor: 'bg-amber-50 text-amber-900 border-amber-200',
     },
     {
-      id: 'cab' as TransportMode,
-      title: 'Cab (Ola/Uber)',
-      iconEmoji: '🚕',
+      ...modeDetails.cab,
       iconComponent: Car,
-      badge: 'On-Demand',
-      badgeColor: 'bg-indigo-50 text-indigo-900 border-indigo-200',
-      travelTimeMin: effectiveCabTime,
-      distanceDisplay: `${distanceKm.toFixed(1)} km`,
-      fareDisplay: 'Coming next',
-      isFareAvailable: false,
-      description: 'Direct door-to-door drive',
+      themeColor: 'indigo',
+      statusBadgeColor: 'bg-indigo-50 text-indigo-900 border-indigo-200',
+    },
+    {
+      ...modeDetails.bus,
+      iconComponent: Bus,
+      themeColor: 'slate',
+      statusBadgeColor: 'bg-slate-100 text-slate-600 border-slate-200',
     },
   ];
 
@@ -103,7 +67,7 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
                 Transport Mode Comparison
               </span>
               <span className="px-2 py-0.2 rounded-md bg-sky-100 text-sky-800 text-[10px] font-extrabold">
-                Phase 9.1
+                Phase 9.2 Real Travel Times
               </span>
             </div>
 
@@ -135,23 +99,23 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
         </div>
       )}
 
-      {/* Options Grid: 4 Modes */}
+      {/* 4 Transport Option Cards: Walking, Auto Rickshaw, Cab, Bus / Metro */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {modes.map((m) => {
-          const isSelected = selectedMode === m.id;
+        {modeCards.map((m) => {
+          const isSelected = selectedMode === m.mode;
 
           return (
             <button
-              key={m.id}
+              key={m.mode}
               type="button"
-              onClick={() => onSelectMode(m.id)}
+              onClick={() => onSelectMode(m.mode)}
               className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between space-y-3 relative group ${
                 isSelected
                   ? 'border-sky-600 bg-sky-50/80 shadow-md ring-2 ring-sky-300'
                   : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70 shadow-2xs'
               }`}
             >
-              {/* Header inside Card */}
+              {/* Card Header: Icon & Mode Label */}
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center space-x-2.5">
                   <div
@@ -159,16 +123,20 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
                       isSelected ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-800'
                     }`}
                   >
-                    {m.iconEmoji}
+                    {m.icon}
                   </div>
                   <div>
                     <h4 className="text-sm font-extrabold text-slate-900 leading-tight">
-                      {m.title}
+                      {m.modeLabel}
                     </h4>
-                    <span
-                      className={`inline-block mt-0.5 px-2 py-0.2 rounded-md text-[9px] font-bold border ${m.badgeColor}`}
-                    >
-                      {m.badge}
+                    <span className="text-[10px] text-slate-400 font-medium block">
+                      {m.mode === 'walk'
+                        ? 'Pedestrian route'
+                        : m.mode === 'auto'
+                        ? 'City rickshaw'
+                        : m.mode === 'cab'
+                        ? 'On-demand cab'
+                        : 'Public transit'}
                     </span>
                   </div>
                 </div>
@@ -182,48 +150,55 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
                 )}
               </div>
 
-              {/* Metrics: Travel time, Distance, Fare */}
-              <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs">
+              {/* Required 4 Metrics Rows: Mode, Distance, Travel time, Data/estimate status */}
+              <div className="space-y-2 pt-2 border-t border-slate-100 text-xs">
+                {/* 1. Distance */}
                 <div className="flex items-baseline justify-between">
-                  <span className="text-slate-500 font-medium">Travel time:</span>
-                  <span className="text-sm font-black text-slate-900">
-                    {m.travelTimeMin} min
+                  <span className="text-slate-500 font-medium">Distance:</span>
+                  <span
+                    className={`font-bold ${
+                      m.isAvailable ? 'text-slate-800' : 'text-slate-400 italic text-[11px]'
+                    }`}
+                  >
+                    {m.distanceDisplay}
                   </span>
                 </div>
 
-                {m.id === 'walk' ? (
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-slate-500 font-medium">Distance:</span>
-                    <span className="font-bold text-slate-700">
-                      {m.distanceDisplay}
-                    </span>
-                  </div>
-                ) : null}
-
+                {/* 2. Travel time */}
                 <div className="flex items-baseline justify-between">
-                  <span className="text-slate-500 font-medium">Fare:</span>
-                  {m.isFareAvailable ? (
-                    <span className="font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                      {m.fareDisplay}
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                      Coming next
-                    </span>
-                  )}
+                  <span className="text-slate-500 font-medium">Travel time:</span>
+                  <span
+                    className={`font-black ${
+                      m.isAvailable
+                        ? 'text-sm text-slate-900'
+                        : 'text-xs text-slate-400 italic'
+                    }`}
+                  >
+                    {m.travelTimeDisplay}
+                  </span>
+                </div>
+
+                {/* 3. Data/estimate status */}
+                <div className="flex items-center justify-between pt-0.5">
+                  <span className="text-slate-500 font-medium">Status:</span>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${m.statusBadgeColor}`}
+                  >
+                    {m.statusLabel}
+                  </span>
                 </div>
               </div>
 
               {/* Selection Indicator Footer */}
-              <div className="pt-1">
+              <div className="pt-1 border-t border-slate-100/60">
                 {isSelected ? (
                   <div className="text-[10px] font-extrabold text-sky-700 flex items-center space-x-1">
                     <ShieldCheck className="w-3.5 h-3.5 text-sky-600" />
-                    <span>Selected for this trip</span>
+                    <span>Selected Mode</span>
                   </div>
                 ) : (
                   <span className="text-[10px] font-semibold text-slate-400 group-hover:text-sky-600 transition-colors">
-                    Click to choose {m.title.split(' ')[0]} →
+                    Click to select {m.modeLabel.split(' ')[0]} →
                   </span>
                 )}
               </div>
@@ -232,13 +207,28 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
         })}
       </div>
 
-      {/* Honest Data Disclaimer Notice */}
-      <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-500 flex items-start space-x-2">
-        <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-        <p className="leading-relaxed">
-          <strong>Data Honesty:</strong> Real street road network duration and distances calculated via OpenStreetMap + OSRM routing. Public transport corridors and genuine live meter/app fare calculations will be integrated in <strong>Phase 9.2</strong> without artificial numbers.
+      {/* Honest Data Rule Notice */}
+      <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1">
+        <div className="flex items-center space-x-1.5 font-bold text-slate-800">
+          <Info className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+          <span>Phase 9.2 Realistic Travel-Time Notes</span>
+        </div>
+        <p className="text-[11px] text-slate-500 leading-relaxed pl-5">
+          • <strong>Walking:</strong> Based on the genuine {distanceKm} km OpenStreetMap road network pedestrian pace (~4.8 km/h).<br />
+          • <strong>Auto & Cab:</strong> Derived from real OSRM road travel times with urban traffic and signal variance ranges.<br />
+          • <strong>Bus / Metro:</strong> Marked as unavailable until actual GTFS transit schedule lines are connected. No arbitrary times are invented.
         </p>
       </div>
+
+      {/* Selected Mode Notice if Bus / Metro is active */}
+      {selectedMode === 'bus' && (
+        <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start space-x-2 animate-fadeIn">
+          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <p className="leading-relaxed">
+            <strong>Public Transit Note:</strong> Fixed bus/metro schedule lines are not connected for this specific pair. In the itinerary, auto rickshaw time (~{modeDetails.auto.travelTimeDisplay}) will serve as the provisional urban transit baseline.
+          </p>
+        </div>
+      )}
     </div>
   );
 };

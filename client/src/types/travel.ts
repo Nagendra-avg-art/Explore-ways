@@ -122,6 +122,38 @@ export interface RouteManeuver {
   durationSeconds?: number;
 }
 
+export type DataStatus = 'road-route' | 'estimated' | 'unavailable';
+
+export interface TransportTimeDetail {
+  mode: TransportMode;
+  modeLabel: string;
+  icon: string;
+  isAvailable: boolean;
+  distanceKm: number | null;
+  distanceDisplay: string;
+  travelTimeMin: number | null;
+  travelTimeDisplay: string;
+  timeRangeMin?: [number, number];
+  status: DataStatus;
+  statusLabel: string;
+  statusDescription: string;
+  assumptions?: string;
+}
+
+export interface RouteTransportComparison {
+  fromName: string;
+  toName: string;
+  roadDistanceKm: number;
+  isRoadNetwork: boolean;
+  routingSource: string;
+  modes: {
+    walk: TransportTimeDetail;
+    auto: TransportTimeDetail;
+    cab: TransportTimeDetail;
+    bus: TransportTimeDetail;
+  };
+}
+
 export interface RouteLeg {
   legIndex: number;
   fromName: string;
@@ -135,11 +167,12 @@ export interface RouteLeg {
   coordinates?: [number, number][]; // Street geometry for this specific leg
   isRoadNetwork?: boolean;
   maneuvers?: RouteManeuver[];
+  transportComparison?: RouteTransportComparison;
   modeEstimates: {
-    walk: { timeMin: number; costInr: number; label: string; fareDisplay?: string; distanceKm?: number };
-    auto: { timeMin: number; costInr: number; costRange: string; label: string; fareDisplay?: string; distanceKm?: number };
-    cab: { timeMin: number; costInr: number; costRange: string; label: string; fareDisplay?: string; distanceKm?: number };
-    bus: { timeMin: number; costInr: number; costRange: string; label: string; fareDisplay?: string; distanceKm?: number };
+    walk: { timeMin: number; costInr: number; label: string; fareDisplay?: string; distanceKm?: number; statusLabel?: string };
+    auto: { timeMin: number; costInr: number; costRange: string; label: string; fareDisplay?: string; distanceKm?: number; timeDisplay?: string; statusLabel?: string };
+    cab: { timeMin: number; costInr: number; costRange: string; label: string; fareDisplay?: string; distanceKm?: number; timeDisplay?: string; statusLabel?: string };
+    bus: { timeMin: number; costInr: number; costRange: string; label: string; fareDisplay?: string; distanceKm?: number; timeDisplay?: string; statusLabel?: string };
   };
 }
 
@@ -163,6 +196,7 @@ export interface TripRoute {
   routeCoordinates?: [number, number][]; // Complete road polyline [lat, lon][]
   isRoadNetwork?: boolean;
   routingSource?: string;
+  selectedModeTimeDisplay?: string;
 }
 
 

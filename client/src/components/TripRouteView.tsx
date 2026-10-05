@@ -192,10 +192,21 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
           <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Transit Time</span>
             <div className="mt-1 flex items-baseline space-x-1">
-              <span className="text-2xl font-black text-slate-800">{tripRoute.totalTravelTimeMin}</span>
-              <span className="text-xs font-bold text-slate-600">min</span>
+              {preferredMode === 'bus' ? (
+                <span className="text-base font-extrabold text-slate-500 italic">Unavailable</span>
+              ) : (
+                <span className="text-2xl font-black text-slate-800">
+                  {tripRoute.selectedModeTimeDisplay || `${tripRoute.totalTravelTimeMin} min`}
+                </span>
+              )}
             </div>
-            <span className="text-[10px] text-slate-400 mt-1">{preferredMode.toUpperCase()} speed model</span>
+            <span className="text-[10px] text-slate-400 mt-1">
+              {preferredMode === 'walk'
+                ? 'Road route walking pace'
+                : preferredMode === 'bus'
+                ? 'Route data not available'
+                : 'Estimated with traffic variance'}
+            </span>
           </div>
 
           {/* Tile 3: Total Estimated Duration */}
@@ -216,13 +227,17 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
                   <span className="text-2xl font-black text-emerald-700">₹0</span>
                   <span className="text-xs font-bold text-emerald-600">Free</span>
                 </>
+              ) : preferredMode === 'bus' ? (
+                <span className="text-xs font-extrabold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">
+                  Unavailable
+                </span>
               ) : (
                 <span className="text-xs font-extrabold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-lg border border-amber-200">
                   Coming next
                 </span>
               )}
             </div>
-            <span className="text-[10px] text-slate-400 mt-1">Phase 9.2 fare estimation</span>
+            <span className="text-[10px] text-slate-400 mt-1">Phase 9.3 fare estimation</span>
           </div>
 
           {/* Tile 5: Total Stops */}
@@ -385,10 +400,7 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
               isRoadNetwork={compLeg.isRoadNetwork}
               selectedMode={preferredMode}
               onSelectMode={(mode) => setPreferredMode(mode)}
-              walkTimeMin={compLeg.modeEstimates.walk.timeMin}
-              autoTimeMin={compLeg.modeEstimates.auto.timeMin}
-              cabTimeMin={compLeg.modeEstimates.cab.timeMin}
-              busTimeMin={compLeg.modeEstimates.bus.timeMin}
+              roadDrivingTimeMin={compLeg.isRoadNetwork ? compLeg.estimatedTravelTimeMin : undefined}
             />
           </div>
         );
@@ -492,7 +504,7 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
                         }`}
                       >
                         <Footprints className="w-3.5 h-3.5" />
-                        <span>Walk: {leg.modeEstimates.walk.timeMin}m (Free)</span>
+                        <span>Walk: {leg.modeEstimates.walk.timeMin}m</span>
                       </button>
 
                       <button
@@ -505,7 +517,7 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
                         }`}
                       >
                         <span>🛺</span>
-                        <span>Auto: {leg.modeEstimates.auto.timeMin}m</span>
+                        <span>Auto: {leg.modeEstimates.auto.timeDisplay || `${leg.modeEstimates.auto.timeMin}m`}</span>
                       </button>
 
                       <button
@@ -518,7 +530,7 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
                         }`}
                       >
                         <Car className="w-3.5 h-3.5" />
-                        <span>Cab: {leg.modeEstimates.cab.timeMin}m</span>
+                        <span>Cab: {leg.modeEstimates.cab.timeDisplay || `${leg.modeEstimates.cab.timeMin}m`}</span>
                       </button>
 
                       <button
@@ -531,7 +543,7 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
                         }`}
                       >
                         <Bus className="w-3.5 h-3.5" />
-                        <span>Bus: {leg.modeEstimates.bus.timeMin}m</span>
+                        <span>Bus: Unavailable</span>
                       </button>
                     </div>
 
@@ -546,10 +558,7 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
                           isRoadNetwork={leg.isRoadNetwork}
                           selectedMode={preferredMode}
                           onSelectMode={(mode) => setPreferredMode(mode)}
-                          walkTimeMin={leg.modeEstimates.walk.timeMin}
-                          autoTimeMin={leg.modeEstimates.auto.timeMin}
-                          cabTimeMin={leg.modeEstimates.cab.timeMin}
-                          busTimeMin={leg.modeEstimates.bus.timeMin}
+                          roadDrivingTimeMin={leg.isRoadNetwork ? leg.estimatedTravelTimeMin : undefined}
                         />
                       </div>
                     )}

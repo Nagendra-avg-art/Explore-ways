@@ -6,9 +6,12 @@ import { usePlaces } from './PlacesContext';
 import { 
   calculateTripRoute, 
   optimizeRouteNearestNeighbor,
-  fetchRealRoadDirections,
-  estimateTransportModes
+  fetchRealRoadDirections
 } from '../services/routingService';
+import {
+  buildRouteTransportComparison,
+  getRepresentativeTravelTimeMin
+} from '../services/transportTimeService';
 
 interface TripContextType {
   tripPlaces: Place[];
@@ -147,37 +150,79 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const enhancedLegs = base.legs.map((leg, idx) => {
         const roadLeg = roadGeometry.legs?.find((l) => l.legIndex === idx);
         if (roadLeg) {
-          const modeEst = estimateTransportModes(roadLeg.distanceKm, roadLeg.durationMin);
-          let legTravelTime: number;
-          switch (preferredMode) {
-            case 'walk':
-              legTravelTime = modeEst.walk.timeMin;
-              break;
-            case 'cab':
-              legTravelTime = roadLeg.durationMin;
-              break;
-            case 'bus':
-              legTravelTime = modeEst.bus.timeMin;
-              break;
-            case 'auto':
-            default:
-              legTravelTime = modeEst.auto.timeMin;
-              break;
-          }
+          const comp = buildRouteTransportComparison(
+            leg.fromName,
+            leg.toName,
+            roadLeg.distanceKm,
+            true,
+            roadLeg.durationMin,
+            roadGeometry.routingSource || 'osrm'
+          );
+          const repTime = getRepresentativeTravelTimeMin(preferredMode, comp.modes);
 
           return {
             ...leg,
             distanceKm: roadLeg.distanceKm,
-            estimatedTravelTimeMin: legTravelTime,
+            estimatedTravelTimeMin: repTime,
             isRoadNetwork: true,
             maneuvers: roadLeg.maneuvers,
-            modeEstimates: modeEst,
+            transportComparison: comp,
+            modeEstimates: {
+              walk: {
+                timeMin: comp.modes.walk.travelTimeMin || 1,
+                costInr: 0,
+                label: 'Walking',
+                fareDisplay: 'Free (₹0)',
+                distanceKm: roadLeg.distanceKm,
+                statusLabel: comp.modes.walk.statusLabel,
+              },
+              auto: {
+                timeMin: comp.modes.auto.travelTimeMin || 5,
+                costInr: 0,
+                costRange: 'Coming next',
+                label: 'Auto Rickshaw',
+                fareDisplay: 'Coming next',
+                distanceKm: roadLeg.distanceKm,
+                timeDisplay: comp.modes.auto.travelTimeDisplay,
+                statusLabel: comp.modes.auto.statusLabel,
+              },
+              cab: {
+                timeMin: comp.modes.cab.travelTimeMin || 5,
+                costInr: 0,
+                costRange: 'Coming next',
+                label: 'Cab (Ola/Uber)',
+                fareDisplay: 'Coming next',
+                distanceKm: roadLeg.distanceKm,
+                timeDisplay: comp.modes.cab.travelTimeDisplay,
+                statusLabel: comp.modes.cab.statusLabel,
+              },
+              bus: {
+                timeMin: 0,
+                costInr: 0,
+                costRange: 'Unavailable',
+                label: 'Bus / Metro',
+                fareDisplay: 'Unavailable',
+                distanceKm: undefined,
+                timeDisplay: 'Unavailable',
+                statusLabel: 'Not available',
+              },
+            },
           };
         }
         return leg;
       });
 
       const totalTravelTime = enhancedLegs.reduce((acc, l) => acc + l.estimatedTravelTimeMin, 0);
+
+      // Selected mode user-facing time display
+      let selectedModeTimeDisplay: string;
+      if (preferredMode === 'bus') {
+        selectedModeTimeDisplay = 'Unavailable';
+      } else if (enhancedLegs.length === 1 && enhancedLegs[0].transportComparison) {
+        selectedModeTimeDisplay = enhancedLegs[0].transportComparison.modes[preferredMode].travelTimeDisplay;
+      } else {
+        selectedModeTimeDisplay = `${totalTravelTime} min`;
+      }
 
       return {
         ...base,
@@ -188,6 +233,7 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         routeCoordinates: roadGeometry.routeCoordinates,
         isRoadNetwork: roadGeometry.isRoadNetwork,
         routingSource: roadGeometry.routingSource,
+        selectedModeTimeDisplay,
       };
     }
 
