@@ -50,6 +50,23 @@ export interface Place {
   transportEstimates?: TransportEstimate[];
   isOpenNow?: boolean;
   entryFee?: string;
+  matchScore?: number;
+  matchReasons?: string[];
+  scoreBreakdown?: ScoreBreakdown;
+}
+
+export interface ScoreBreakdown {
+  interest: number;
+  distance: number;
+  rating: number;
+  timeFit: number;
+  styleFit: number;
+}
+
+export interface RecommendedPlace extends Place {
+  matchScore: number;
+  matchReasons: string[];
+  scoreBreakdown: ScoreBreakdown;
 }
 
 export type TimeOption = '2h' | '4h' | 'halfDay' | 'fullDay';

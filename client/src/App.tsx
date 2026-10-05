@@ -12,6 +12,7 @@ import { LocationProvider, useLocation } from './context/LocationContext';
 import { PreferencesProvider, usePreferences } from './context/PreferencesContext';
 import { DEMO_PLACES } from './data/demoPlaces';
 import { CategoryId, Place } from './types/travel';
+import { scorePlace } from './services/recommendationEngine';
 import { 
   MapPin, 
   Route, 
@@ -78,9 +79,22 @@ function MainAppContent() {
       });
   }, []);
 
-  // Filtered Places for Home feed
+  // Filtered and Ranked Places for Home feed
   const filteredPlaces = useMemo(() => {
-    return DEMO_PLACES.filter((place) => {
+    // Score all places using multi-factor recommendation engine
+    let places = DEMO_PLACES.map((place) => {
+      const scored = scorePlace(place, location.lat, location.lon, preferences);
+      return {
+        ...place,
+        distanceKm: scored.distanceKm,
+        travelTimeMin: Math.max(5, Math.round(scored.distanceKm * 2.5 + 4)),
+        matchScore: scored.matchScore,
+        matchReasons: scored.matchReasons,
+        scoreBreakdown: scored.scoreBreakdown,
+      };
+    });
+
+    places = places.filter((place) => {
       const matchesCategory = selectedCategory === 'all' || place.category === selectedCategory;
       const matchesSearch = searchQuery.trim() === '' || 
         place.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -88,12 +102,16 @@ function MainAppContent() {
         place.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
       return matchesCategory && matchesSearch;
     });
-  }, [selectedCategory, searchQuery]);
 
-  // Saved Places
+    // Sort descending by matchScore
+    places.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
+    return places;
+  }, [selectedCategory, searchQuery, location, preferences]);
+
+  // Saved Places (carrying match scores)
   const savedPlaces = useMemo(() => {
-    return DEMO_PLACES.filter(p => savedPlaceIds.includes(p.id));
-  }, [savedPlaceIds]);
+    return filteredPlaces.filter(p => savedPlaceIds.includes(p.id));
+  }, [filteredPlaces, savedPlaceIds]);
 
   const toggleSavePlace = (placeId: string) => {
     setSavedPlaceIds((prev) =>
@@ -131,7 +149,7 @@ function MainAppContent() {
       case 'culture':
         return `Artisan Villages & Folk Cultural Venues in ${location.city}`;
       default:
-        return `Recommended Highlights Near ${location.city}`;
+        return `Top Recommended Matches for You in ${location.city}`;
     }
   };
 
@@ -309,8 +327,13 @@ function MainAppContent() {
           <section className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 px-1">
               <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-sky-600">
-                  {selectedCategory === 'all' ? 'Featured Places' : 'Filtered Discovery'}
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>
+                    {selectedCategory === 'all' 
+                      ? `AI Personalized Matches (${getStyleEmoji()} • ${preferences.availableHours}h)`
+                      : 'Category Discovery'}
+                  </span>
                 </span>
                 <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
                   {getSectionTitle()}

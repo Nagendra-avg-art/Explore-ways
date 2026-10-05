@@ -126,18 +126,99 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
         {/* ============================================================== */}
         <div className="p-6 sm:p-8 space-y-6 flex-1 text-slate-800">
           
-          {/* Why Recommended Callout */}
-          <div className="p-4 rounded-2xl bg-sky-50/90 border border-sky-100/90 flex items-start space-x-3">
-            <div className="w-7 h-7 rounded-lg bg-sky-600 text-white flex items-center justify-center shrink-0 mt-0.5">
-              <Sparkles className="w-4 h-4" />
+          {/* Recommendation Match Analysis & Rationale */}
+          {place.matchScore !== undefined ? (
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-50/90 via-sky-50/60 to-white border border-emerald-200/80 space-y-3.5 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                    <Sparkles className="w-4 h-4 fill-white" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Recommendation Engine</span>
+                    <h4 className="text-sm font-extrabold text-slate-900">{place.matchScore}% Match for Your Travel Profile</h4>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 text-xs font-black">
+                  {place.matchScore >= 90 ? 'Top Match' : 'Recommended'}
+                </span>
+              </div>
+
+              {/* Personalized Match Reasons */}
+              {place.matchReasons && place.matchReasons.length > 0 && (
+                <div className="space-y-1.5 pl-0.5">
+                  {place.matchReasons.map((reason, idx) => (
+                    <div key={idx} className="flex items-start space-x-2 text-xs text-slate-700">
+                      <span className="text-emerald-600 font-bold">✓</span>
+                      <span className="leading-snug">{reason}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Multi-Factor Score Breakdown */}
+              {place.scoreBreakdown && (
+                <div className="pt-2 border-t border-emerald-100 space-y-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Match Factors Breakdown
+                  </span>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
+                    <div>
+                      <div className="flex justify-between text-slate-600 mb-0.5">
+                        <span>Interest Match</span>
+                        <span className="font-bold text-slate-800">{place.scoreBreakdown.interest}%</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-slate-200/80 rounded-full overflow-hidden">
+                        <div className="h-full bg-sky-500 rounded-full" style={{ width: `${place.scoreBreakdown.interest}%` }} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between text-slate-600 mb-0.5">
+                        <span>Proximity</span>
+                        <span className="font-bold text-slate-800">{place.scoreBreakdown.distance}%</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-slate-200/80 rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${place.scoreBreakdown.distance}%` }} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between text-slate-600 mb-0.5">
+                        <span>Time Window</span>
+                        <span className="font-bold text-slate-800">{place.scoreBreakdown.timeFit}%</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-slate-200/80 rounded-full overflow-hidden">
+                        <div className="h-full bg-amber-500 rounded-full" style={{ width: `${place.scoreBreakdown.timeFit}%` }} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between text-slate-600 mb-0.5">
+                        <span>Style Affinity</span>
+                        <span className="font-bold text-slate-800">{place.scoreBreakdown.styleFit}%</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-slate-200/80 rounded-full overflow-hidden">
+                        <div className="h-full bg-purple-500 rounded-full" style={{ width: `${place.scoreBreakdown.styleFit}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            <div>
-              <span className="text-xs font-bold text-sky-950 block">Why Recommended For You</span>
-              <p className="text-xs text-sky-900 mt-0.5 leading-relaxed">
-                {place.whyRecommended}
-              </p>
+          ) : (
+            <div className="p-4 rounded-2xl bg-sky-50/90 border border-sky-100/90 flex items-start space-x-3">
+              <div className="w-7 h-7 rounded-lg bg-sky-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-sky-950 block">Why Recommended For You</span>
+                <p className="text-xs text-sky-900 mt-0.5 leading-relaxed">
+                  {place.whyRecommended}
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* About / Historical Background */}
           <div className="space-y-2">

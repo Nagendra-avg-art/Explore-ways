@@ -25,7 +25,7 @@ export interface BackendPlace {
 }
 
 // Master places database (centered in Hyderabad hub)
-const PLACES_DATA: BackendPlace[] = [
+export const PLACES_DATA: BackendPlace[] = [
   {
     id: 'charminar',
     name: 'Charminar',
@@ -281,7 +281,7 @@ const PLACES_DATA: BackendPlace[] = [
 ];
 
 // Haversine formula to compute great-circle distance in kilometers
-function calculateHaversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+export function calculateHaversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371; // Earth radius in km
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
@@ -296,7 +296,7 @@ function calculateHaversineDistanceKm(lat1: number, lon1: number, lat2: number, 
 /**
  * Determine if a place is open based on current local hour and day
  */
-function checkIsOpenNow(place: BackendPlace): boolean {
+export function checkIsOpenNow(place: BackendPlace): boolean {
   const now = new Date();
   const currentDay = now.getDay(); // 0 is Sunday, 5 is Friday
   const currentHour = now.getHours() + now.getMinutes() / 60;

@@ -6,13 +6,16 @@ import {
   RotateCcw, 
   Star, 
   MapPin, 
-  Clock 
+  Clock,
+  Sparkles
 } from 'lucide-react';
 import { DEMO_PLACES } from '../data/demoPlaces';
 import { CategoryPills } from './CategoryPills';
 import { PlaceCard } from './PlaceCard';
 import { CategoryId, Place, SortOption } from '../types/travel';
 import { useLocation } from '../context/LocationContext';
+import { usePreferences } from '../context/PreferencesContext';
+import { scorePlace } from '../services/recommendationEngine';
 
 interface ExploreViewProps {
   onViewDetails: (place: Place) => void;
@@ -22,19 +25,6 @@ interface ExploreViewProps {
 
 type DistanceFilter = 'all' | '5' | '10' | '20';
 type RatingFilter = 'all' | '4.5' | '4.7';
-
-// Haversine formula for dynamic distance calculation
-function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371; // km
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return Math.round(R * c * 10) / 10;
-}
 
 // Calculate open now status based on local time
 function getIsOpenNow(placeId: string): boolean {
@@ -63,6 +53,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
   onToggleSave,
 }) => {
   const { location } = useLocation();
+  const { preferences, setIsPreferencesModalOpen } = usePreferences();
 
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -81,17 +72,20 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
     (openNowOnly ? 1 : 0) +
     (selectedCategory !== 'all' ? 1 : 0);
 
-  // Filter and Sort places dynamically
+  // Filter and Sort places dynamically with AI Recommendation Scoring
   const processedPlaces = useMemo(() => {
     let result = DEMO_PLACES.map((place) => {
-      // Recalculate distance dynamically relative to user location
-      const dynamicDist = calculateDistanceKm(location.lat, location.lon, place.lat, place.lon);
+      // Score place using multi-factor recommendation engine
+      const scored = scorePlace(place, location.lat, location.lon, preferences);
       const isOpen = getIsOpenNow(place.id);
       return {
         ...place,
-        distanceKm: dynamicDist,
-        travelTimeMin: Math.max(5, Math.round(dynamicDist * 2.5 + 4)),
+        distanceKm: scored.distanceKm,
+        travelTimeMin: Math.max(5, Math.round(scored.distanceKm * 2.5 + 4)),
         isOpenNow: isOpen,
+        matchScore: scored.matchScore,
+        matchReasons: scored.matchReasons,
+        scoreBreakdown: scored.scoreBreakdown,
       };
     });
 
@@ -128,15 +122,17 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
       result = result.filter((p) => p.isOpenNow === true);
     }
 
-    // Sorting
-    if (sortBy === 'distance') {
+    // Sorting: AI Recommended (Match %), Distance, or Rating
+    if (sortBy === 'recommended') {
+      result = [...result].sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
+    } else if (sortBy === 'distance') {
       result = [...result].sort((a, b) => a.distanceKm - b.distanceKm);
     } else if (sortBy === 'rating') {
       result = [...result].sort((a, b) => b.rating - a.rating);
     }
 
     return result;
-  }, [selectedCategory, searchQuery, distanceFilter, ratingFilter, openNowOnly, sortBy, location]);
+  }, [selectedCategory, searchQuery, distanceFilter, ratingFilter, openNowOnly, sortBy, location, preferences]);
 
   const resetAllFilters = () => {
     setSelectedCategory('all');
@@ -203,6 +199,20 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
             )}
           </div>
 
+          {/* Travel Profile Quick Tune Pill */}
+          <button
+            type="button"
+            onClick={() => setIsPreferencesModalOpen(true)}
+            className="flex items-center space-x-1.5 px-3 py-2 rounded-2xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200/80 text-xs font-bold transition-all shadow-2xs cursor-pointer shrink-0"
+            title="Click to customize your travel profile and preferences"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+            <span className="capitalize">{preferences.travelStyle}</span>
+            <span className="text-amber-400">•</span>
+            <span>{preferences.availableHours}h</span>
+            <span className="text-[10px] text-amber-600 font-semibold underline">(Edit)</span>
+          </button>
+
           {/* Sort Selector */}
           <div className="flex items-center space-x-1.5 px-3 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600 font-medium shrink-0">
             <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
@@ -213,7 +223,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
               aria-label="Sort destinations"
               className="bg-transparent font-bold text-slate-900 focus:outline-none cursor-pointer"
             >
-              <option value="recommended">Recommended</option>
+              <option value="recommended">Best Match (AI Ranked)</option>
               <option value="distance">Distance (Nearest)</option>
               <option value="rating">Rating (Highest)</option>
             </select>
