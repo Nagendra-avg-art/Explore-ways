@@ -7,6 +7,9 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   budgetAmount: 1000,
   travelStyle: 'solo',
   pace: 'moderate',
+  maxDistanceKm: null,
+  minRating: null,
+  openNowOnly: false,
   isConfigured: false,
 };
 

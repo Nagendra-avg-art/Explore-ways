@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Clock, IndianRupee, Sparkles, Check, ArrowRight, SlidersHorizontal } from 'lucide-react';
 import { usePreferences } from '../context/PreferencesContext';
+import { useLocation } from '../context/LocationContext';
 import { TimeOption, BudgetOption, CategoryId } from '../types/travel';
-import { TRAVEL_CATEGORIES } from '../data/demoPlaces';
+import { TRAVEL_CATEGORIES, DEMO_PLACES } from '../data/demoPlaces';
+import { rankPlacesForUser } from '../services/recommendationEngine';
 
 interface PlanDayWidgetProps {
   onBuildPlan?: (planConfig: {
@@ -14,7 +16,12 @@ interface PlanDayWidgetProps {
 
 export const PlanDayWidget: React.FC<PlanDayWidgetProps> = ({ onBuildPlan }) => {
   const { preferences, updatePreferences, setIsPreferencesModalOpen } = usePreferences();
+  const { location } = useLocation();
   const [planGenerated, setPlanGenerated] = useState<boolean>(false);
+
+  const topDayPlaces = useMemo(() => {
+    return rankPlacesForUser(DEMO_PLACES, location.lat, location.lon, preferences).slice(0, 3);
+  }, [location, preferences]);
 
   // Map hours to TimeOption
   const getTimeOptionFromHours = (hrs: number): TimeOption => {
@@ -238,7 +245,7 @@ export const PlanDayWidget: React.FC<PlanDayWidgetProps> = ({ onBuildPlan }) => 
 
         {/* Interactive Itinerary Teaser Confirmation Banner */}
         {planGenerated && (
-          <div className="p-4 sm:p-5 rounded-2xl bg-white border border-emerald-200 shadow-xs text-slate-900 space-y-2 animate-fadeIn">
+          <div className="p-4 sm:p-5 rounded-2xl bg-white border border-emerald-200 shadow-xs text-slate-900 space-y-3 animate-fadeIn">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
               <div className="flex items-center space-x-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -255,8 +262,27 @@ export const PlanDayWidget: React.FC<PlanDayWidgetProps> = ({ onBuildPlan }) => 
                 </span>
               </div>
             </div>
+
+            {topDayPlaces.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                {topDayPlaces.map((stop, idx) => (
+                  <div key={stop.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center space-x-2.5">
+                    <span className="w-6 h-6 rounded-full bg-sky-100 text-sky-800 font-bold text-xs flex items-center justify-center shrink-0">
+                      {idx + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-bold text-slate-900 block truncate">{stop.name}</span>
+                      <span className="text-[10px] text-emerald-600 font-semibold">
+                        {stop.matchScore}% Match • {idx === 0 ? '10:00 AM' : idx === 1 ? '1:00 PM' : '4:30 PM'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <p className="text-xs text-slate-600 leading-relaxed">
-              Based on your preference for <strong>{preferences.interests.join(', ')}</strong> with a <strong>{preferences.pace}</strong> pace, we suggest starting at <strong>Charminar (10:00 AM)</strong>, taking a relaxed 5-minute stroll to <strong>Old City Dum Biryani (12:30 PM)</strong>, and wrapping up with sunset panoramas at <strong>Golconda Fort (3:30 PM)</strong>.
+              Based on your active interests in <strong>{preferences.interests.join(', ')}</strong> with a <strong>{preferences.pace}</strong> pace and budget of <strong>₹{preferences.budgetAmount.toLocaleString()}</strong>, your custom day route begins at <strong>{topDayPlaces[0]?.name || 'first stop'}</strong> ({topDayPlaces[0]?.matchReasons?.[0] || 'Top Match'}), continues to <strong>{topDayPlaces[1]?.name || 'second stop'}</strong>, and concludes at <strong>{topDayPlaces[2]?.name || 'final destination'}</strong>.
             </p>
           </div>
         )}

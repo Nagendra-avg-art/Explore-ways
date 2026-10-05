@@ -103,6 +103,17 @@ function MainAppContent() {
       return matchesCategory && matchesSearch;
     });
 
+    // Apply Hard Filters from preferences
+    if (preferences.maxDistanceKm && preferences.maxDistanceKm > 0) {
+      places = places.filter((p) => p.distanceKm <= preferences.maxDistanceKm!);
+    }
+    if (preferences.minRating && preferences.minRating > 0) {
+      places = places.filter((p) => p.rating >= preferences.minRating!);
+    }
+    if (preferences.openNowOnly) {
+      places = places.filter((p) => p.isOpenNow === true);
+    }
+
     // Sort descending by matchScore
     places.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
     return places;

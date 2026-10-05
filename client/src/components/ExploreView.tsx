@@ -26,26 +26,6 @@ interface ExploreViewProps {
 type DistanceFilter = 'all' | '5' | '10' | '20';
 type RatingFilter = 'all' | '4.5' | '4.7';
 
-// Calculate open now status based on local time
-function getIsOpenNow(placeId: string): boolean {
-  const now = new Date();
-  const hour = now.getHours() + now.getMinutes() / 60;
-  const day = now.getDay();
-
-  // Friday check for Chowmahalla
-  if (placeId === 'chowmahalla' && day === 5) return false;
-  // Standard operating hours
-  if (placeId === 'birla-mandir') {
-    return (hour >= 7 && hour <= 12) || (hour >= 15 && hour <= 21);
-  }
-  if (placeId === 'niloufer-cafe') {
-    return hour >= 4 && hour <= 23.5;
-  }
-  if (placeId === 'paradise-biryani') {
-    return hour >= 11.5 && hour <= 23.5;
-  }
-  return hour >= 9.5 && hour <= 18.0;
-}
 
 export const ExploreView: React.FC<ExploreViewProps> = ({
   onViewDetails,
@@ -53,17 +33,24 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
   onToggleSave,
 }) => {
   const { location } = useLocation();
-  const { preferences, setIsPreferencesModalOpen } = usePreferences();
+  const { preferences, updatePreferences, setIsPreferencesModalOpen } = usePreferences();
 
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortOption>('recommended');
-  
-  // Multi-criteria filters
-  const [distanceFilter, setDistanceFilter] = useState<DistanceFilter>('all');
-  const [ratingFilter, setRatingFilter] = useState<RatingFilter>('all');
-  const [openNowOnly, setOpenNowOnly] = useState<boolean>(false);
   const [showFiltersPanel, setShowFiltersPanel] = useState<boolean>(true);
+
+  // Derived filter state directly from preferences
+  const distanceFilter: DistanceFilter = 
+    preferences.maxDistanceKm === 5 ? '5' :
+    preferences.maxDistanceKm === 10 ? '10' :
+    preferences.maxDistanceKm === 20 ? '20' : 'all';
+
+  const ratingFilter: RatingFilter = 
+    preferences.minRating === 4.7 ? '4.7' :
+    preferences.minRating === 4.5 ? '4.5' : 'all';
+
+  const openNowOnly = preferences.openNowOnly ?? false;
 
   // Compute active filters count
   const activeFiltersCount = 
@@ -74,27 +61,26 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
 
   // Filter and Sort places dynamically with AI Recommendation Scoring
   const processedPlaces = useMemo(() => {
+    // 1. Score, filter and rank all candidate places using multi-factor engine
     let result = DEMO_PLACES.map((place) => {
-      // Score place using multi-factor recommendation engine
       const scored = scorePlace(place, location.lat, location.lon, preferences);
-      const isOpen = getIsOpenNow(place.id);
       return {
         ...place,
         distanceKm: scored.distanceKm,
         travelTimeMin: Math.max(5, Math.round(scored.distanceKm * 2.5 + 4)),
-        isOpenNow: isOpen,
+        isOpenNow: scored.isOpenNow,
         matchScore: scored.matchScore,
         matchReasons: scored.matchReasons,
         scoreBreakdown: scored.scoreBreakdown,
       };
     });
 
-    // Filter: Category
+    // 2. Filter: Category
     if (selectedCategory !== 'all') {
       result = result.filter((p) => p.category === selectedCategory);
     }
 
-    // Filter: Search Keyword
+    // 3. Filter: Search Keyword
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       result = result.filter(
@@ -105,24 +91,24 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
       );
     }
 
-    // Filter: Max Distance
+    // 4. Filter: Max Distance Radius
     if (distanceFilter !== 'all') {
       const maxKm = parseFloat(distanceFilter);
       result = result.filter((p) => p.distanceKm <= maxKm);
     }
 
-    // Filter: Minimum Rating
+    // 5. Filter: Minimum Rating
     if (ratingFilter !== 'all') {
       const minStars = parseFloat(ratingFilter);
       result = result.filter((p) => p.rating >= minStars);
     }
 
-    // Filter: Open Now
+    // 6. Filter: Open Now Status
     if (openNowOnly) {
       result = result.filter((p) => p.isOpenNow === true);
     }
 
-    // Sorting: AI Recommended (Match %), Distance, or Rating
+    // 7. Sorting: AI Recommended (Match %), Distance, or Rating
     if (sortBy === 'recommended') {
       result = [...result].sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
     } else if (sortBy === 'distance') {
@@ -134,13 +120,28 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
     return result;
   }, [selectedCategory, searchQuery, distanceFilter, ratingFilter, openNowOnly, sortBy, location, preferences]);
 
+  const setDistanceFilter = (val: DistanceFilter) => {
+    updatePreferences({ maxDistanceKm: val === 'all' ? null : parseFloat(val) });
+  };
+
+  const setRatingFilter = (val: RatingFilter) => {
+    updatePreferences({ minRating: val === 'all' ? null : parseFloat(val) });
+  };
+
+  const setOpenNowOnly = (toggle: boolean | ((prev: boolean) => boolean)) => {
+    const nextVal = typeof toggle === 'function' ? toggle(openNowOnly) : toggle;
+    updatePreferences({ openNowOnly: nextVal });
+  };
+
   const resetAllFilters = () => {
     setSelectedCategory('all');
     setSearchQuery('');
-    setDistanceFilter('all');
-    setRatingFilter('all');
-    setOpenNowOnly(false);
     setSortBy('recommended');
+    updatePreferences({
+      maxDistanceKm: null,
+      minRating: null,
+      openNowOnly: false,
+    });
   };
 
   return (

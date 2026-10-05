@@ -7,7 +7,9 @@ import {
   Check, 
   SlidersHorizontal,
   RotateCcw,
-  CheckCircle2
+  CheckCircle2,
+  MapPin,
+  Star
 } from 'lucide-react';
 import { usePreferences } from '../context/PreferencesContext';
 import { TRAVEL_CATEGORIES } from '../data/demoPlaces';
@@ -28,6 +30,9 @@ export const PreferencesModal: React.FC = () => {
   const [draftInterests, setDraftInterests] = useState<CategoryId[]>(preferences.interests);
   const [draftHours, setDraftHours] = useState<number>(preferences.availableHours);
   const [draftBudget, setDraftBudget] = useState<number>(preferences.budgetAmount);
+  const [draftDistance, setDraftDistance] = useState<number | null>(preferences.maxDistanceKm ?? null);
+  const [draftMinRating, setDraftMinRating] = useState<number | null>(preferences.minRating ?? null);
+  const [draftOpenNow, setDraftOpenNow] = useState<boolean>(preferences.openNowOnly ?? false);
   const [savedToast, setSavedToast] = useState<boolean>(false);
 
   // Sync draft when modal opens
@@ -38,6 +43,9 @@ export const PreferencesModal: React.FC = () => {
       setDraftInterests(preferences.interests);
       setDraftHours(preferences.availableHours);
       setDraftBudget(preferences.budgetAmount);
+      setDraftDistance(preferences.maxDistanceKm ?? null);
+      setDraftMinRating(preferences.minRating ?? null);
+      setDraftOpenNow(preferences.openNowOnly ?? false);
       setSavedToast(false);
     }
   }, [isPreferencesModalOpen, preferences]);
@@ -78,12 +86,15 @@ export const PreferencesModal: React.FC = () => {
       interests: draftInterests,
       availableHours: draftHours,
       budgetAmount: draftBudget,
+      maxDistanceKm: draftDistance,
+      minRating: draftMinRating,
+      openNowOnly: draftOpenNow,
     });
     setSavedToast(true);
     setTimeout(() => {
       setIsPreferencesModalOpen(false);
       setSavedToast(false);
-    }, 500);
+    }, 400);
   };
 
   const handleReset = () => {
@@ -105,10 +116,10 @@ export const PreferencesModal: React.FC = () => {
             </div>
             <div>
               <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-                <span>Travel Profile & Preferences</span>
+                <span>Travel Profile & Recommendations</span>
               </h2>
               <p className="text-xs text-slate-500">
-                Tailor routes, pacing, and recommendations to your journey style.
+                Personalize scoring, duration, budget, distance, and pacing in real time.
               </p>
             </div>
           </div>
@@ -213,7 +224,7 @@ export const PreferencesModal: React.FC = () => {
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center space-x-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                <span>3. Favorite Interests & Passions</span>
+                <span>3. Favorite Interests & Passions (30% Match Weight)</span>
               </label>
               <span className="text-[11px] text-slate-500 font-medium">
                 {draftInterests.length} selected
@@ -247,7 +258,7 @@ export const PreferencesModal: React.FC = () => {
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center space-x-1.5">
                 <Clock className="w-3.5 h-3.5 text-sky-600" />
-                <span>4. Available Time</span>
+                <span>4. Available Time (Visits & Travel)</span>
               </label>
               <span className="text-xs font-extrabold text-sky-700 px-2.5 py-0.5 rounded-full bg-sky-50 border border-sky-200">
                 {draftHours} {draftHours === 1 ? 'Hour' : 'Hours'}
@@ -349,8 +360,91 @@ export const PreferencesModal: React.FC = () => {
                 />
               </div>
               <span className="text-[11px] text-slate-400">
-                {draftBudget <= 800 ? 'Budget Backpacker' : draftBudget <= 2000 ? 'Standard Traveler' : 'Comfort & Cabs'}
+                {draftBudget <= 800 ? 'Budget Explorer' : draftBudget <= 2000 ? 'Comfortable' : 'Premium / Cab & Dining'}
               </span>
+            </div>
+          </div>
+
+          {/* SECTION 6: FILTERS (Distance Radius, Rating, Open Now) */}
+          <div className="pt-4 border-t border-slate-100 space-y-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center space-x-1.5">
+              <span>6. Discovery Filters (Radius, Rating & Hours)</span>
+            </h3>
+
+            {/* Distance Radius */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-slate-600 flex items-center space-x-1">
+                <MapPin className="w-3.5 h-3.5 text-sky-600" />
+                <span>Max Distance Radius</span>
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { id: null, label: 'Any' },
+                  { id: 5, label: '< 5 km' },
+                  { id: 10, label: '< 10 km' },
+                  { id: 20, label: '< 20 km' },
+                ].map((item) => (
+                  <button
+                    key={String(item.id)}
+                    type="button"
+                    onClick={() => setDraftDistance(item.id)}
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer text-center ${
+                      draftDistance === item.id
+                        ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
+                        : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Minimum Rating */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-slate-600 flex items-center space-x-1">
+                <Star className="w-3.5 h-3.5 text-amber-500" />
+                <span>Minimum Rating</span>
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: null, label: 'All Ratings' },
+                  { id: 4.5, label: '★ 4.5+' },
+                  { id: 4.7, label: '★ 4.7+' },
+                ].map((item) => (
+                  <button
+                    key={String(item.id)}
+                    type="button"
+                    onClick={() => setDraftMinRating(item.id)}
+                    className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer text-center ${
+                      draftMinRating === item.id
+                        ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
+                        : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Open Now Toggle */}
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setDraftOpenNow(!draftOpenNow)}
+                className={`w-full py-2.5 px-4 rounded-xl border text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
+                  draftOpenNow
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                    : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  <span className={`w-2.5 h-2.5 rounded-full ${draftOpenNow ? 'bg-white animate-pulse' : 'bg-slate-300'}`} />
+                  <span>Open Now Only</span>
+                </div>
+                <span>{draftOpenNow ? 'Active' : 'Off'}</span>
+              </button>
             </div>
           </div>
 

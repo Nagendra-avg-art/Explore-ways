@@ -7,11 +7,13 @@ import {
 } from './placesController.js';
 
 export interface ScoreBreakdown {
-  interest: number;
-  distance: number;
-  rating: number;
+  interestMatch: number;
+  distanceProximity: number;
+  ratingQuality: number;
   timeFit: number;
-  styleFit: number;
+  budgetFit: number;
+  openStatus: number;
+  travelStyleBonus: number;
 }
 
 export interface RecommendedPlaceResponse {
@@ -42,7 +44,7 @@ export interface RecommendedPlaceResponse {
 }
 
 // Helper to convert human duration strings like '1–2 hrs' to numeric hours
-function parseDurationHours(durationStr: string): number {
+export function parseDurationHours(durationStr: string): number {
   const lower = durationStr.toLowerCase();
   if (lower.includes('45 min') || lower.includes('30 min')) return 0.75;
   if (lower.includes('1–2 hrs') || lower.includes('1-2 hrs')) return 1.5;
@@ -51,7 +53,19 @@ function parseDurationHours(durationStr: string): number {
   if (lower.includes('1 hr') || lower.includes('1 hour')) return 1.0;
   if (lower.includes('2 hrs') || lower.includes('2 hours')) return 2.0;
   if (lower.includes('3 hrs') || lower.includes('3 hours')) return 3.0;
-  return 1.5; // fallback
+  return 1.5;
+}
+
+// Helper to extract numeric entry fee in INR
+export function parseEntryFeeAmount(entryFeeStr?: string): number {
+  if (!entryFeeStr) return 0;
+  const lower = entryFeeStr.toLowerCase();
+  if (lower.includes('free')) return 0;
+  const match = entryFeeStr.match(/₹\s*(\d+)/);
+  if (match && match[1]) {
+    return parseInt(match[1], 10);
+  }
+  return 0;
 }
 
 /**
@@ -63,6 +77,7 @@ export function scorePlaceForUser(
   userLon: number,
   interests: string[],
   availableHours: number,
+  budgetAmount: number,
   travelStyle: string,
   pace: string
 ): {
@@ -78,63 +93,168 @@ export function scorePlaceForUser(
   const isOpenNow = checkIsOpenNow(place);
   const reasons: string[] = [];
 
-  // 1. Interest Score (Weight: 35%)
-  let interestScore = 30;
-  const isDirectCategoryMatch = interests.includes(place.category);
-  const hasTagMatch = place.tags.some((tag) => 
-    interests.some((interest) => tag.toLowerCase().includes(interest.toLowerCase()))
+  // =========================================================================
+  // 1. INTEREST SCORE (Weight: 30%)
+  // =========================================================================
+  let interestScore = 20; // baseline for non-matching categories
+  const normInterests = interests.map((i) => i.trim().toLowerCase()).filter(Boolean);
+  const isDirectCategoryMatch = normInterests.includes(place.category.toLowerCase());
+  const matchingTags = place.tags.filter((tag) =>
+    normInterests.some((interest) => tag.toLowerCase().includes(interest) || interest.includes(tag.toLowerCase()))
   );
 
-  if (isDirectCategoryMatch) {
-    interestScore = 95;
+  if (normInterests.length === 0 || normInterests.includes('all')) {
+    interestScore = 80; // neutral when no specific interest chosen
+  } else if (isDirectCategoryMatch) {
+    // If it matches the very first selected interest, give peak priority
+    const isFirstInterest = normInterests[0] === place.category.toLowerCase();
+    interestScore = isFirstInterest ? 96 : 90;
+    if (matchingTags.length > 0) {
+      interestScore = Math.min(100, interestScore + matchingTags.length * 3);
+    }
     reasons.push(`Direct match for your interest in ${place.categoryLabel.replace(/^[^\w\s]+/, '').trim()}`);
-  } else if (hasTagMatch) {
-    interestScore = 75;
-    reasons.push(`Matches your themes: ${place.tags.join(', ')}`);
-  } else if (interests.length === 0) {
-    interestScore = 80; // No filter specified, neutral high
-  }
-
-  // 2. Distance Score (Weight: 20%)
-  let distanceScore = 50;
-  if (distanceKm <= 3.0) {
-    distanceScore = 100;
-    reasons.push(`Very close by: Only ${distanceKm} km away`);
-  } else if (distanceKm <= 7.0) {
-    distanceScore = 85;
-    reasons.push(`Quick reach: ${distanceKm} km from you`);
-  } else if (distanceKm <= 15.0) {
-    distanceScore = 65;
+  } else if (matchingTags.length > 0) {
+    interestScore = 60 + Math.min(20, matchingTags.length * 8);
+    reasons.push(`Matches your themes: ${matchingTags.join(', ')}`);
   } else {
-    distanceScore = Math.max(20, Math.round(100 - distanceKm * 2.5));
+    interestScore = 15; // strong divergence: non-matching place drops significantly
   }
 
-  // 3. Rating & Quality Score (Weight: 15%)
-  // Normalized 4.0 to 5.0 -> 30 to 100
-  const normalizedRating = Math.min(100, Math.max(30, Math.round(((place.rating - 3.8) / 1.2) * 85 + 15)));
-  const reviewBonus = place.reviewCount > 10000 ? 5 : place.reviewCount > 5000 ? 3 : 0;
-  const ratingScore = Math.min(100, normalizedRating + reviewBonus);
+  // =========================================================================
+  // 2. DISTANCE SCORE (Weight: 20%)
+  // =========================================================================
+  let distanceScore = 40;
+  if (distanceKm <= 1.5) {
+    distanceScore = 100;
+    reasons.push(`Walking distance: Only ${distanceKm} km away`);
+  } else if (distanceKm <= 4.0) {
+    distanceScore = 88;
+    reasons.push(`Close by: ${distanceKm} km from you`);
+  } else if (distanceKm <= 8.0) {
+    distanceScore = 70;
+    reasons.push(`Convenient reach: ${distanceKm} km away`);
+  } else if (distanceKm <= 15.0) {
+    distanceScore = 50;
+  } else if (distanceKm <= 25.0) {
+    distanceScore = 30;
+  } else {
+    distanceScore = Math.max(5, Math.round(100 - distanceKm * 3.5));
+  }
+
+  // =========================================================================
+  // 3. RATING & QUALITY SCORE (Weight: 15%)
+  // =========================================================================
+  let ratingScore = 50;
+  if (place.rating >= 4.8) {
+    ratingScore = 96;
+  } else if (place.rating >= 4.7) {
+    ratingScore = 88;
+  } else if (place.rating >= 4.6) {
+    ratingScore = 80;
+  } else if (place.rating >= 4.5) {
+    ratingScore = 70;
+  } else if (place.rating >= 4.4) {
+    ratingScore = 60;
+  } else {
+    ratingScore = 40;
+  }
+
+  if (place.reviewCount > 15000) {
+    ratingScore = Math.min(100, ratingScore + 4);
+  }
+
   if (place.rating >= 4.7) {
-    reasons.push(`Top-rated landmark (${place.rating}★ from ${place.reviewCount.toLocaleString()} reviews)`);
+    reasons.push(`Top-rated: ${place.rating}★ (${place.reviewCount.toLocaleString()} reviews)`);
   }
 
-  // 4. Time & Pace Compatibility Score (Weight: 15%)
+  // =========================================================================
+  // 4. TIME & PACE COMPATIBILITY SCORE (Weight: 15%)
+  // =========================================================================
   const baseVisitHours = parseDurationHours(place.visitDuration);
-  const paceMultiplier = pace === 'relaxed' ? 1.35 : pace === 'fast' ? 0.75 : 1.0;
+  const paceMultiplier = pace === 'relaxed' ? 1.4 : pace === 'fast' ? 0.7 : 1.0;
   const adjustedStayHours = baseVisitHours * paceMultiplier;
   const totalRequiredHours = adjustedStayHours + (travelTimeMin / 60);
 
   let timeFitScore = 50;
-  if (totalRequiredHours <= availableHours) {
-    timeFitScore = 100;
-    reasons.push(`Fits smoothly into your ${availableHours}h window (${place.visitDuration} stay)`);
-  } else if (totalRequiredHours <= availableHours + 0.75) {
-    timeFitScore = 70;
+
+  if (availableHours <= 2.5) {
+    // 2-Hour Quick Trip
+    if (totalRequiredHours <= 1.3) {
+      timeFitScore = 100;
+      reasons.push(`Optimal quick stop for your ${availableHours}h schedule`);
+    } else if (totalRequiredHours <= 2.0) {
+      timeFitScore = 75;
+      reasons.push(`Fits within your ${availableHours}h limit`);
+    } else {
+      timeFitScore = 15; // Severe penalty: a 3h fort/village cannot fit in 2h
+    }
+  } else if (availableHours <= 5) {
+    // 4-Hour Half-Day Excursion
+    if (totalRequiredHours >= 1.2 && totalRequiredHours <= 3.5) {
+      timeFitScore = 100;
+      reasons.push(`Perfect duration for a ${availableHours}h half-day outing`);
+    } else if (totalRequiredHours <= 1.2) {
+      timeFitScore = 80;
+    } else {
+      timeFitScore = 35;
+    }
   } else {
-    timeFitScore = 30; // Schedule too tight
+    // Full Day (6 to 9+ Hours)
+    if (adjustedStayHours >= 2.0) {
+      timeFitScore = 100;
+      reasons.push(`Spacious landmark ideal for a full-day itinerary`);
+    } else {
+      timeFitScore = 75; // Quick stops are still fine, but full day favors major anchors
+    }
   }
 
-  // 5. Travel Style Affinity Score (Weight: 15%)
+  // =========================================================================
+  // 5. BUDGET FIT SCORE (Weight: 10%)
+  // =========================================================================
+  const entryFeeNum = parseEntryFeeAmount(place.entryFee);
+  const transitEstCost = Math.max(30, Math.round(distanceKm * 15));
+  const isFoodStop = place.category === 'food' || place.category === 'cafes';
+  const foodEst = isFoodStop ? (place.id === 'paradise-biryani' ? 350 : place.id === 'niloufer-cafe' ? 80 : 200) : 0;
+  const totalEstExpense = entryFeeNum + transitEstCost + foodEst;
+
+  let budgetFitScore = 70;
+  if (budgetAmount <= 600) {
+    // Budget Backpacker (₹500)
+    if (totalEstExpense <= 120) {
+      budgetFitScore = 100;
+      reasons.push(`Pocket-friendly: Under ₹150 estimated expense`);
+    } else if (totalEstExpense <= 250) {
+      budgetFitScore = 80;
+    } else if (totalEstExpense <= 450) {
+      budgetFitScore = 55;
+    } else {
+      budgetFitScore = 25; // Exceeds budget constraints
+    }
+  } else if (budgetAmount <= 1500) {
+    // Moderate / Popular (₹1,000)
+    if (totalEstExpense <= 600) {
+      budgetFitScore = 95;
+      reasons.push(`Comfortable value within your ₹${budgetAmount.toLocaleString()} budget`);
+    } else {
+      budgetFitScore = 65;
+    }
+  } else {
+    // Premium / Cab & Dining (₹2,500 – ₹5,000+)
+    budgetFitScore = 100;
+    reasons.push(`Premium experience matching your ₹${budgetAmount.toLocaleString()} budget`);
+  }
+
+  // =========================================================================
+  // 6. OPERATING STATUS SCORE (Weight: 10%)
+  // =========================================================================
+  let openStatusScore = isOpenNow ? 100 : 20;
+  if (isOpenNow) {
+    reasons.push('Open now for immediate visit');
+  }
+
+  // =========================================================================
+  // 7. TRAVEL STYLE MODIFIER (±10 points)
+  // =========================================================================
   let styleFitScore = 75;
   const tagsLower = place.tags.map((t) => t.toLowerCase());
   const cat = place.category;
@@ -142,20 +262,22 @@ export function scorePlaceForUser(
   if (travelStyle === 'solo') {
     if (cat === 'cafes' || cat === 'food' || cat === 'photography' || tagsLower.includes('old city')) {
       styleFitScore = 98;
-      reasons.push('High solo traveler affinity: Walkable, great photography & cafe stops');
+      reasons.push('Solo favorite: Walkable, great photography & cafe stops');
     }
   } else if (travelStyle === 'couple') {
     if (cat === 'nature' || tagsLower.includes('sunset') || tagsLower.includes('palace') || cat === 'architecture') {
       styleFitScore = 98;
       reasons.push('Scenic & romantic appeal with relaxed atmosphere');
+    } else if (cat === 'shopping' || tagsLower.includes('bazaar')) {
+      styleFitScore = 60; // Crowded bazaars less preferred for romantic vibe
     }
   } else if (travelStyle === 'family') {
     if (tagsLower.includes('family friendly') || tagsLower.includes('crafts') || cat === 'culture' || cat === 'nature') {
       styleFitScore = 98;
       reasons.push('Family-approved: Comfortable terrain & multi-age interest');
     } else if (place.id === 'golconda') {
-      // Steep climbs can be taxing for elders/toddlers
-      styleFitScore = 45;
+      // Steep climbs of hundreds of stone stairs are taxing for toddlers and grandparents
+      styleFitScore = 35;
     }
   } else if (travelStyle === 'friends') {
     if (cat === 'food' || cat === 'shopping' || tagsLower.includes('bazaar') || place.id === 'golconda') {
@@ -164,25 +286,31 @@ export function scorePlaceForUser(
     }
   }
 
-  // Weighted Linear Combination
+  // =========================================================================
+  // WEIGHTED COMPOSITE SCORE
+  // =========================================================================
   const weightedTotal = 
-    0.35 * interestScore +
+    0.30 * interestScore +
     0.20 * distanceScore +
     0.15 * ratingScore +
     0.15 * timeFitScore +
-    0.15 * styleFitScore;
+    0.10 * budgetFitScore +
+    0.10 * openStatusScore +
+    ((styleFitScore - 75) * 0.10); // Style affinity bonus/penalty
 
-  const matchScore = Math.min(99, Math.max(45, Math.round(weightedTotal)));
+  const matchScore = Math.min(99, Math.max(25, Math.round(weightedTotal)));
 
   return {
     matchScore,
-    matchReasons: reasons.slice(0, 3), // Top 3 reasons
+    matchReasons: reasons.slice(0, 3),
     scoreBreakdown: {
-      interest: interestScore,
-      distance: distanceScore,
-      rating: ratingScore,
+      interestMatch: interestScore,
+      distanceProximity: distanceScore,
+      ratingQuality: ratingScore,
       timeFit: timeFitScore,
-      styleFit: styleFitScore
+      budgetFit: budgetFitScore,
+      openStatus: openStatusScore,
+      travelStyleBonus: styleFitScore
     },
     distanceKm,
     travelTimeMin,
@@ -190,43 +318,64 @@ export function scorePlaceForUser(
   };
 }
 
-/**
- * GET /api/recommendations
- * Query: lat, lon, interests, hours, budget, style, pace, limit
- */
 export const getRecommendations = async (req: Request, res: Response) => {
-  const { 
-    lat, 
-    lon, 
-    interests: interestsQuery, 
-    hours, 
-    budget, 
-    style, 
-    pace,
-    limit 
-  } = req.query;
+  const body = req.body || {};
+  const query = req.query || {};
 
-  const userLat = lat ? parseFloat(lat as string) : 17.3616;
-  const userLon = lon ? parseFloat(lon as string) : 78.4747;
+  const lat = body.userLat ?? body.lat ?? query.lat;
+  const lon = body.userLon ?? body.lon ?? query.lon;
   
-  const interests = interestsQuery 
-    ? (interestsQuery as string).split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
-    : ['history', 'food', 'temples'];
+  // Extract interests
+  const rawInterests = body.preferences?.interests ?? body.interests ?? query.interests;
+  let interests: string[] = [];
+  if (Array.isArray(rawInterests)) {
+    interests = rawInterests.map((s) => String(s).trim().toLowerCase()).filter(Boolean);
+  } else if (typeof rawInterests === 'string') {
+    interests = rawInterests.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  }
 
-  const availableHours = hours ? parseFloat(hours as string) : 4;
-  const budgetAmount = budget ? parseFloat(budget as string) : 1000;
-  const travelStyle = (style as string) || 'solo';
-  const travelPace = (pace as string) || 'moderate';
-  const resultLimit = limit ? parseInt(limit as string, 10) : 10;
+  // Extract hours
+  const rawTime = body.preferences?.availableTime ?? body.availableHours ?? body.hours ?? query.hours;
+  let availableHours = 4;
+  if (rawTime === 'short' || rawTime === '2' || rawTime === 2) availableHours = 2;
+  else if (rawTime === 'half_day' || rawTime === '4' || rawTime === 4) availableHours = 4;
+  else if (rawTime === 'full_day' || rawTime === '8' || rawTime === 8) availableHours = 8;
+  else if (typeof rawTime === 'number') availableHours = rawTime;
+  else if (!isNaN(parseFloat(rawTime))) availableHours = parseFloat(rawTime);
 
-  // Score all places
-  const scoredPlaces: RecommendedPlaceResponse[] = PLACES_DATA.map((place) => {
+  // Extract budget
+  const rawBudget = body.preferences?.budgetAmount ?? body.budget ?? query.budget;
+  const budgetAmount = rawBudget ? parseFloat(String(rawBudget)) : 1000;
+
+  // Extract style & pace
+  const travelStyle = body.preferences?.travelStyle ?? body.style ?? query.style ?? 'solo';
+  const travelPace = body.preferences?.pacePreference ?? body.pace ?? query.pace ?? 'moderate';
+
+  // Extract filters
+  const maxDistance = body.preferences?.maxDistanceKm ?? body.maxDistance ?? query.maxDistance;
+  const minRating = body.preferences?.minRating ?? body.minRating ?? query.minRating;
+  const openNow = body.preferences?.openNowOnly ?? (body.openNow !== undefined ? body.openNow : query.openNow);
+  const isOpenNowFilter = openNow === true || openNow === 'true';
+
+  const limit = body.limit ?? query.limit;
+  const userLat = lat ? parseFloat(String(lat)) : 17.3616;
+  const userLon = lon ? parseFloat(String(lon)) : 78.4747;
+  const resultLimit = limit ? parseInt(String(limit), 10) : 10;
+
+  // Development logging
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[Recommendation Engine API] Recalculating: interests=[${interests.join(', ')}] hours=${availableHours} budget=₹${budgetAmount} style=${travelStyle} pace=${travelPace} origin=(${userLat}, ${userLon})`);
+  }
+
+  // 1. Score all places
+  let scoredPlaces: RecommendedPlaceResponse[] = PLACES_DATA.map((place) => {
     const scoreResult = scorePlaceForUser(
       place,
       userLat,
       userLon,
       interests,
       availableHours,
+      budgetAmount,
       travelStyle,
       travelPace
     );
@@ -242,20 +391,44 @@ export const getRecommendations = async (req: Request, res: Response) => {
     };
   });
 
-  // Sort descending by matchScore
+  // 2. Apply Hard Filters if specified
+  if (maxDistance !== undefined && maxDistance !== null) {
+    const maxDistNum = typeof maxDistance === 'number' ? maxDistance : parseFloat(String(maxDistance));
+    if (!isNaN(maxDistNum) && maxDistNum > 0) {
+      scoredPlaces = scoredPlaces.filter((p) => p.distanceKm <= maxDistNum);
+    }
+  }
+
+  if (minRating !== undefined && minRating !== null) {
+    const minRatingNum = typeof minRating === 'number' ? minRating : parseFloat(String(minRating));
+    if (!isNaN(minRatingNum) && minRatingNum > 0) {
+      scoredPlaces = scoredPlaces.filter((p) => p.rating >= minRatingNum);
+    }
+  }
+
+  if (isOpenNowFilter) {
+    scoredPlaces = scoredPlaces.filter((p) => p.isOpenNow === true);
+  }
+
+  // 3. Sort descending by matchScore
   scoredPlaces.sort((a, b) => b.matchScore - a.matchScore);
 
   const topResults = scoredPlaces.slice(0, resultLimit);
 
   return res.status(200).json({
     success: true,
+    totalCandidates: PLACES_DATA.length,
+    count: topResults.length,
     total: topResults.length,
     appliedPreferences: {
       interests,
       availableHours,
       budgetAmount,
       travelStyle,
-      pace: travelPace
+      pace: travelPace,
+      maxDistance: maxDistance ? parseFloat(String(maxDistance)) : null,
+      minRating: minRating ? parseFloat(String(minRating)) : null,
+      openNow: isOpenNowFilter
     },
     origin: { lat: userLat, lon: userLon },
     places: topResults

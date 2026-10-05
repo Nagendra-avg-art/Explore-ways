@@ -60,6 +60,8 @@ export interface ScoreBreakdown {
   distance: number;
   rating: number;
   timeFit: number;
+  budgetFit: number;
+  openStatus: number;
   styleFit: number;
 }
 
@@ -103,6 +105,9 @@ export interface UserPreferences {
   budgetAmount: number;
   travelStyle: TravelStyle;
   pace: TravelPace;
+  maxDistanceKm?: number | null;
+  minRating?: number | null;
+  openNowOnly?: boolean;
   isConfigured: boolean;
 }
 
