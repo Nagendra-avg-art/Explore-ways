@@ -292,3 +292,51 @@ export function optimizeRouteNearestNeighbor(
     distanceSavedKm: Math.round(distanceSavedKm * 10) / 10,
   };
 }
+
+/**
+ * Fetches real road network directions and geometry from the backend routing API.
+ * Calls /api/routes/directions with waypoint coordinates.
+ */
+export async function fetchRealRoadDirections(
+  waypoints: { lat: number; lon: number }[],
+  mode: import('../types/travel').TransportMode = 'auto'
+): Promise<{
+  isRoadNetwork: boolean;
+  source: string;
+  totalDistanceKm: number;
+  totalDurationMin: number;
+  coordinates: [number, number][];
+  legs: {
+    legIndex: number;
+    distanceKm: number;
+    durationMin: number;
+    maneuvers: import('../types/travel').RouteManeuver[];
+  }[];
+} | null> {
+  if (waypoints.length < 2) return null;
+
+  const coordStr = waypoints.map((w) => `${w.lon.toFixed(6)},${w.lat.toFixed(6)}`).join(';');
+  const profile = mode === 'walk' ? 'walking' : 'driving';
+
+  try {
+    const res = await fetch(`/api/routes/directions?coordinates=${encodeURIComponent(coordStr)}&mode=${profile}`);
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    if (data.success && Array.isArray(data.coordinates)) {
+      return {
+        isRoadNetwork: data.isRoadNetwork === true,
+        source: data.source || 'osrm',
+        totalDistanceKm: data.totalDistanceKm,
+        totalDurationMin: data.totalDurationMin,
+        coordinates: data.coordinates,
+        legs: data.legs || [],
+      };
+    }
+  } catch (err: unknown) {
+    console.warn('Real road routing request failed, staying on direct distance:', (err as Error)?.message);
+  }
+  return null;
+}
+

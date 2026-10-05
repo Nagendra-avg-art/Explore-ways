@@ -116,6 +116,12 @@ export interface UserPreferences {
 
 export type TransportMode = 'walk' | 'auto' | 'cab' | 'bus';
 
+export interface RouteManeuver {
+  instruction: string;
+  distanceMeters: number;
+  durationSeconds?: number;
+}
+
 export interface RouteLeg {
   legIndex: number;
   fromName: string;
@@ -126,6 +132,9 @@ export interface RouteLeg {
   toLon: number;
   distanceKm: number;
   estimatedTravelTimeMin: number;
+  coordinates?: [number, number][]; // Street geometry for this specific leg
+  isRoadNetwork?: boolean;
+  maneuvers?: RouteManeuver[];
   modeEstimates: {
     walk: { timeMin: number; costInr: number; label: string };
     auto: { timeMin: number; costInr: number; costRange: string; label: string };
@@ -151,6 +160,9 @@ export interface TripRoute {
   totalEstimatedTransportCostInr: number;
   isOptimized: boolean;
   distanceSavedKm?: number;
+  routeCoordinates?: [number, number][]; // Complete road polyline [lat, lon][]
+  isRoadNetwork?: boolean;
+  routingSource?: string;
 }
 
 

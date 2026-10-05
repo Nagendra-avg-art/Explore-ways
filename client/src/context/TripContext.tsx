@@ -5,7 +5,8 @@ import { useLocation } from './LocationContext';
 import { usePlaces } from './PlacesContext';
 import { 
   calculateTripRoute, 
-  optimizeRouteNearestNeighbor 
+  optimizeRouteNearestNeighbor,
+  fetchRealRoadDirections 
 } from '../services/routingService';
 
 interface TripContextType {
@@ -56,6 +57,21 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [distanceSavedKm, setDistanceSavedKm] = useState<number>(0);
   const [preferredMode, setPreferredMode] = useState<import('../types/travel').TransportMode>('auto');
 
+  // Road geometry state (fetched asynchronously from OSRM)
+  const [roadGeometry, setRoadGeometry] = useState<{
+    routeCoordinates?: [number, number][];
+    isRoadNetwork: boolean;
+    routingSource?: string;
+    totalDistanceKm?: number;
+    totalDurationMin?: number;
+    legs?: {
+      legIndex: number;
+      distanceKm: number;
+      durationMin: number;
+      maneuvers: import('../types/travel').RouteManeuver[];
+    }[];
+  } | null>(null);
+
   // Sync to localStorage
   useEffect(() => {
     try {
@@ -86,7 +102,37 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return activeStops.map((p) => p.id);
   }, [activeStops]);
 
-  // Compute TripRoute metrics
+  // Asynchronously query real road directions via OSRM when waypoints change
+  useEffect(() => {
+    if (activeStops.length === 0 || !location) {
+      setRoadGeometry(null);
+      return;
+    }
+
+    let isCancelled = false;
+    const waypoints = [
+      { lat: location.lat, lon: location.lon },
+      ...activeStops.map((p) => ({ lat: p.lat, lon: p.lon }))
+    ];
+
+    fetchRealRoadDirections(waypoints, preferredMode).then((res) => {
+      if (isCancelled || !res) return;
+      setRoadGeometry({
+        routeCoordinates: res.coordinates,
+        isRoadNetwork: res.isRoadNetwork,
+        routingSource: res.source,
+        totalDistanceKm: res.totalDistanceKm,
+        totalDurationMin: res.totalDurationMin,
+        legs: res.legs,
+      });
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [location.lat, location.lon, activeStops, preferredMode]);
+
+  // Compute TripRoute metrics (instantly calculated, seamlessly enhanced with road geometry)
   const tripRoute: TripRoute = useMemo(() => {
     const origin = {
       label: location.isManual ? `${location.city} Center (Demo Hub)` : `${location.area || location.city} (Live GPS)`,
@@ -94,8 +140,37 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       lon: location.lon,
       isActualGps: !location.isManual,
     };
-    return calculateTripRoute(origin, activeStops, isOptimized, distanceSavedKm, preferredMode);
-  }, [location, activeStops, isOptimized, distanceSavedKm, preferredMode]);
+    const base = calculateTripRoute(origin, activeStops, isOptimized, distanceSavedKm, preferredMode);
+
+    if (roadGeometry && roadGeometry.routeCoordinates && roadGeometry.routeCoordinates.length > 0) {
+      const enhancedLegs = base.legs.map((leg, idx) => {
+        const roadLeg = roadGeometry.legs?.find((l) => l.legIndex === idx);
+        if (roadLeg) {
+          return {
+            ...leg,
+            distanceKm: roadLeg.distanceKm,
+            estimatedTravelTimeMin: roadLeg.durationMin,
+            isRoadNetwork: true,
+            maneuvers: roadLeg.maneuvers,
+          };
+        }
+        return leg;
+      });
+
+      return {
+        ...base,
+        totalDistanceKm: roadGeometry.totalDistanceKm ?? base.totalDistanceKm,
+        totalTravelTimeMin: roadGeometry.totalDurationMin ?? base.totalTravelTimeMin,
+        totalEstimatedDurationMin: (roadGeometry.totalDurationMin ?? base.totalTravelTimeMin) + base.totalVisitTimeMin,
+        legs: enhancedLegs,
+        routeCoordinates: roadGeometry.routeCoordinates,
+        isRoadNetwork: roadGeometry.isRoadNetwork,
+        routingSource: roadGeometry.routingSource,
+      };
+    }
+
+    return base;
+  }, [location, activeStops, isOptimized, distanceSavedKm, preferredMode, roadGeometry]);
 
   // Route Optimization (Nearest Neighbor)
   const optimizeTripRoute = () => {

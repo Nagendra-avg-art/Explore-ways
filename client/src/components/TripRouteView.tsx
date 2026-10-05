@@ -18,7 +18,8 @@ import {
   Info,
   ExternalLink,
   AlertTriangle,
-  Wallet
+  Wallet,
+  Compass
 } from 'lucide-react';
 import { useTrip } from '../context/TripContext';
 import { usePreferences } from '../context/PreferencesContext';
@@ -53,6 +54,7 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
 
   const { preferences } = usePreferences();
   const [expandedLegIndex, setExpandedLegIndex] = useState<number | null>(null);
+  const [expandedManeuversLegIndex, setExpandedManeuversLegIndex] = useState<number | null>(null);
 
   if (tripPlaces.length === 0) {
     return (
@@ -97,16 +99,31 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
     setExpandedLegIndex((prev) => (prev === idx ? null : idx));
   };
 
+  const toggleManeuversExpand = (idx: number) => {
+    setExpandedManeuversLegIndex((prev) => (prev === idx ? null : idx));
+  };
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto animate-fadeIn">
       {/* Top Banner: Route Metrics & Controls */}
       <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[11px] font-extrabold tracking-wide uppercase">
                 Phase 8 Multi-Stop Itinerary
               </span>
+              {tripRoute.isRoadNetwork ? (
+                <span className="px-2 py-0.5 rounded-full bg-sky-600 text-white text-[10px] font-extrabold flex items-center space-x-1 shadow-xs">
+                  <span>🛣️</span>
+                  <span>Real Road Network (OSRM)</span>
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold flex items-center space-x-1">
+                  <span>📐</span>
+                  <span>Direct Distance</span>
+                </span>
+              )}
               {tripRoute.origin.isActualGps ? (
                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center space-x-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
@@ -164,7 +181,9 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
               <span className="text-2xl font-black text-sky-700">{tripRoute.totalDistanceKm}</span>
               <span className="text-xs font-bold text-slate-600">km</span>
             </div>
-            <span className="text-[10px] text-slate-400 mt-1">Haversine formula</span>
+            <span className="text-[10px] text-slate-400 mt-1">
+              {tripRoute.isRoadNetwork ? 'OSRM road network' : 'Haversine formula'}
+            </span>
           </div>
 
           {/* Tile 2: Estimated Travel Time */}
@@ -373,12 +392,26 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
                         <span className="font-black text-sky-700 bg-sky-100 px-2 py-0.5 rounded-md">
                           {formatDistanceKm(leg.distanceKm)}
                         </span>
+                        {leg.isRoadNetwork && (
+                          <span className="text-[9px] font-extrabold text-sky-700 bg-sky-200/60 px-1.5 py-0.5 rounded">
+                            🛣️ Road
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center space-x-2">
                         <span className="text-[11px] font-bold text-slate-600">
                           {leg.estimatedTravelTimeMin}m via {preferredMode.toUpperCase()}
                         </span>
+                        {leg.maneuvers && leg.maneuvers.length > 0 && (
+                          <button
+                            onClick={() => toggleManeuversExpand(index)}
+                            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 flex items-center space-x-1 underline cursor-pointer"
+                          >
+                            <Compass className="w-3 h-3" />
+                            <span>{expandedManeuversLegIndex === index ? 'Hide Steps' : `Steps (${leg.maneuvers.length})`}</span>
+                          </button>
+                        )}
                         <button
                           onClick={() => toggleLegExpand(index)}
                           className="text-[11px] font-bold text-sky-600 hover:text-sky-800 underline cursor-pointer"
@@ -430,6 +463,41 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
                           <span className="text-[10px] font-bold text-slate-400 block uppercase">🚌 Bus / Metro</span>
                           <span className="font-extrabold text-slate-800 text-xs block">{leg.modeEstimates.bus.timeMin} min</span>
                           <span className="text-[11px] font-bold text-sky-700">{leg.modeEstimates.bus.costRange}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Collapsible Turn-by-Turn Maneuvers */}
+                    {expandedManeuversLegIndex === index && leg.maneuvers && leg.maneuvers.length > 0 && (
+                      <div className="pt-2 border-t border-sky-200/60 space-y-2 animate-fadeIn">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-slate-800 flex items-center space-x-1">
+                            <Compass className="w-3.5 h-3.5 text-sky-600" />
+                            <span>Turn-by-Turn Road Directions ({leg.maneuvers.length} steps)</span>
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-medium">via OpenStreetMap</span>
+                        </div>
+                        <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+                          {leg.maneuvers.map((m, mIdx) => (
+                            <div
+                              key={mIdx}
+                              className="text-xs flex items-start space-x-2.5 bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-2xs"
+                            >
+                              <span className="w-5 h-5 rounded-full bg-sky-100 text-sky-800 text-[10px] font-extrabold flex items-center justify-center shrink-0 mt-0.5">
+                                {mIdx + 1}
+                              </span>
+                              <div className="flex-1 flex items-baseline justify-between gap-2">
+                                <span className="text-slate-800 font-medium leading-relaxed">{m.instruction}</span>
+                                {m.distanceMeters > 0 && (
+                                  <span className="text-[10px] font-bold text-slate-500 shrink-0">
+                                    {m.distanceMeters >= 1000
+                                      ? `${(m.distanceMeters / 1000).toFixed(1)} km`
+                                      : `${Math.round(m.distanceMeters)} m`}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
@@ -528,7 +596,11 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
         <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-400">
           <div className="flex items-center space-x-1.5">
             <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            <span>Distances calculated from GPS coordinates via Haversine great-circle formula. Transit fares & travel times are urban traffic model estimates.</span>
+            <span>
+              {tripRoute.isRoadNetwork
+                ? 'Real street route geometry and road distances provided by Open Source Routing Machine (OSRM) + OpenStreetMap.'
+                : 'Distances calculated from GPS coordinates via Haversine great-circle formula. Transit fares & travel times are urban traffic model estimates.'}
+            </span>
           </div>
           <span className="font-semibold text-slate-500 shrink-0">
             {tripPlaces.length} destination stops planned

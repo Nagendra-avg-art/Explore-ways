@@ -19,6 +19,7 @@ app.use(express.json());
 import locationRoutes from './routes/locationRoutes.js';
 import placesRoutes from './routes/placesRoutes.js';
 import recommendationsRoutes from './routes/recommendationsRoutes.js';
+import routesRoutes from './routes/routesRoutes.js';
 
 // Basic health check endpoint
 app.get('/api/health', (req: Request, res: Response) => {
@@ -39,6 +40,9 @@ app.use('/api/places', placesRoutes);
 
 // Recommendation Engine routes
 app.use('/api/recommendations', recommendationsRoutes);
+
+// Real Road Routing & Directions routes
+app.use('/api/routes', routesRoutes);
 
 // Start listening
 app.listen(PORT, () => {

@@ -187,17 +187,25 @@ export const MapView: React.FC<MapViewProps> = ({
     }
 
     if (location && tripPlaces.length > 0) {
-      // Multi-Stop Itinerary: User GPS -> Stop 1 -> Stop 2 -> ...
-      const latlngs: [number, number][] = [
-        [location.lat, location.lon],
-        ...tripPlaces.map((p): [number, number] => [p.lat, p.lon]),
-      ];
+      // Check if real road coordinates are available from tripRoute!
+      const hasRoadCoordinates = Boolean(
+        tripRoute.isRoadNetwork &&
+        tripRoute.routeCoordinates &&
+        tripRoute.routeCoordinates.length > 1
+      );
+
+      const latlngs: [number, number][] = hasRoadCoordinates
+        ? tripRoute.routeCoordinates!
+        : [
+            [location.lat, location.lon],
+            ...tripPlaces.map((p): [number, number] => [p.lat, p.lon]),
+          ];
 
       const polyline = L.polyline(latlngs, {
         color: '#0284c7', // Sky Blue
-        weight: 4,
-        opacity: 0.85,
-        dashArray: '8, 8',
+        weight: hasRoadCoordinates ? 5 : 4,
+        opacity: hasRoadCoordinates ? 0.95 : 0.85,
+        dashArray: hasRoadCoordinates ? undefined : '8, 8',
       }).addTo(map);
 
       routePolylineRef.current = polyline;
@@ -217,7 +225,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
       routePolylineRef.current = polyline;
     }
-  }, [location, displayedPlaces, selectedPlace, savedPlaceIds, tripPlaces, isOptimized]);
+  }, [location, displayedPlaces, selectedPlace, savedPlaceIds, tripPlaces, isOptimized, tripRoute]);
 
   // Center on User GPS
   const handleCenterOnUser = () => {
@@ -229,7 +237,13 @@ export const MapView: React.FC<MapViewProps> = ({
 
   // Fit all destinations
   const handleFitAllPlaces = () => {
-    if (!mapInstanceRef.current || displayedPlaces.length === 0) return;
+    if (!mapInstanceRef.current) return;
+    if (tripPlaces.length > 0 && tripRoute.routeCoordinates && tripRoute.routeCoordinates.length > 1) {
+      const bounds = L.latLngBounds(tripRoute.routeCoordinates);
+      mapInstanceRef.current.fitBounds(bounds, { padding: [40, 40] });
+      return;
+    }
+    if (displayedPlaces.length === 0) return;
     const latlngs: [number, number][] = displayedPlaces.map((p) => [p.lat, p.lon]);
     if (location) {
       latlngs.push([location.lat, location.lon]);
@@ -295,9 +309,20 @@ export const MapView: React.FC<MapViewProps> = ({
                   <Route className="w-4 h-4" />
                 </div>
                 <div>
-                  <span className="text-[10px] font-bold text-sky-700 uppercase tracking-wider block">
-                    Active Trip Route
-                  </span>
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-[10px] font-bold text-sky-700 uppercase tracking-wider block">
+                      Active Trip Route
+                    </span>
+                    {tripRoute.isRoadNetwork ? (
+                      <span className="px-1.5 py-0.2 text-[9px] font-extrabold rounded-md bg-sky-100 text-sky-800">
+                        🛣️ Road
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.2 text-[9px] font-medium rounded-md bg-slate-100 text-slate-600">
+                        📐 Direct
+                      </span>
+                    )}
+                  </div>
                   <h4 className="text-xs sm:text-sm font-black text-slate-900 leading-tight">
                     {tripPlaces.length} Stops · {tripRoute.totalDistanceKm} km
                   </h4>
