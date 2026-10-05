@@ -16,6 +16,7 @@ import { DEMO_PLACES, TRAVEL_CATEGORIES } from '../data/demoPlaces';
 import { Place, CategoryId } from '../types/travel';
 import { useLocation } from '../context/LocationContext';
 import { useTrip } from '../context/TripContext';
+import { ACTIVE_MAP_PROVIDER } from '../config/mapConfig';
 
 interface MapViewProps {
   onViewDetails: (place: Place) => void;
@@ -64,12 +65,11 @@ export const MapView: React.FC<MapViewProps> = ({
       zoomControl: false, // We'll position custom zoom control if needed
     });
 
-    // Add CartoDB Voyager Light Tiles (Clean, beautiful pastel travel aesthetic)
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
-      maxZoom: 19,
-      subdomains: 'abcd',
+    // Add Active Tile Layer (OpenStreetMap - 100% Free, Keyless, Open Source)
+    L.tileLayer(ACTIVE_MAP_PROVIDER.url, {
+      attribution: ACTIVE_MAP_PROVIDER.attribution,
+      maxZoom: ACTIVE_MAP_PROVIDER.maxZoom,
+      subdomains: ACTIVE_MAP_PROVIDER.subdomains || 'abc',
     }).addTo(map);
 
     // Zoom controls on top-right
