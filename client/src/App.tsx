@@ -10,6 +10,8 @@ import { ExploreView } from './components/ExploreView';
 import { MapView } from './components/MapView';
 import { LocationProvider, useLocation } from './context/LocationContext';
 import { PreferencesProvider, usePreferences } from './context/PreferencesContext';
+import { TripProvider, useTrip } from './context/TripContext';
+import { TripRouteView } from './components/TripRouteView';
 import { DEMO_PLACES } from './data/demoPlaces';
 import { CategoryId, Place } from './types/travel';
 import { scorePlace } from './services/recommendationEngine';
@@ -21,7 +23,6 @@ import {
   Info, 
   Compass, 
   Calendar, 
-  Heart, 
   Bot,
   Loader2,
   AlertCircle,
@@ -53,10 +54,18 @@ function MainAppContent() {
   // Preferences Context
   const { preferences, setIsPreferencesModalOpen } = usePreferences();
 
+  // Trip Context
+  const { 
+    tripPlaces, 
+    tripPlaceIds, 
+    toggleTripPlace, 
+    tripRoute 
+  } = useTrip();
+
   // Discovery state
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [savedPlaceIds, setSavedPlaceIds] = useState<string[]>(['charminar', 'golconda']);
+  const savedPlaceIds = tripPlaceIds;
   
   // Modal state
   const [selectedPlaceForModal, setSelectedPlaceForModal] = useState<Place | null>(null);
@@ -119,15 +128,12 @@ function MainAppContent() {
     return places;
   }, [selectedCategory, searchQuery, location, preferences]);
 
-  // Saved Places (carrying match scores)
-  const savedPlaces = useMemo(() => {
-    return filteredPlaces.filter(p => savedPlaceIds.includes(p.id));
-  }, [filteredPlaces, savedPlaceIds]);
 
   const toggleSavePlace = (placeId: string) => {
-    setSavedPlaceIds((prev) =>
-      prev.includes(placeId) ? prev.filter((id) => id !== placeId) : [...prev, placeId]
-    );
+    const place = DEMO_PLACES.find((p) => p.id === placeId);
+    if (place) {
+      toggleTripPlace(place);
+    }
   };
 
   const handleExploreNearMe = async () => {
@@ -463,56 +469,34 @@ function MainAppContent() {
         </div>
       )}
 
-      {/* TAB 6: MY TRIP */}
+      {/* TAB 6: MY TRIP ROUTE & ITINERARY */}
       {activeTab === 'mytrip' && (
-        <div className="space-y-6 animate-fadeIn">
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-rose-600">Your Saved Places</span>
-              <h2 className="text-2xl font-extrabold text-slate-900">My Saved Trip</h2>
-              <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-                You have saved <strong>{savedPlaces.length}</strong> destinations to your personal trip list.
-              </p>
-            </div>
-            {savedPlaces.length > 0 && (
-              <button 
-                onClick={() => setActiveTab('home')}
-                className="px-5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
-              >
-                + Add More Places
-              </button>
-            )}
-          </div>
+        <TripRouteView
+          onViewPlaceDetails={(p) => setSelectedPlaceForModal(p)}
+          onNavigateToMap={() => setActiveTab('map')}
+          onExploreMore={() => setActiveTab('explore')}
+        />
+      )}
 
-          {savedPlaces.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {savedPlaces.map((place) => (
-                <PlaceCard
-                  key={place.id}
-                  place={place}
-                  isSaved={true}
-                  onToggleSave={toggleSavePlace}
-                  onViewDetails={(p) => setSelectedPlaceForModal(p)}
-                />
-              ))}
+      {/* Floating Action Pill: View Route */}
+      {tripPlaces.length > 0 && activeTab !== 'mytrip' && (
+        <div className="fixed bottom-20 md:bottom-6 right-6 z-40 animate-slideUp">
+          <button
+            onClick={() => setActiveTab('mytrip')}
+            className="px-4 py-3 bg-slate-900/90 hover:bg-slate-900 text-white rounded-2xl shadow-xl hover:shadow-2xl border border-slate-700/60 backdrop-blur-md transition-all flex items-center space-x-3 cursor-pointer group"
+          >
+            <div className="w-7 h-7 rounded-xl bg-orange-500 text-white flex items-center justify-center font-bold text-xs">
+              {tripPlaces.length}
             </div>
-          ) : (
-            <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center space-y-3">
-              <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-400 flex items-center justify-center mx-auto">
-                <Heart className="w-6 h-6" />
-              </div>
-              <h3 className="font-bold text-slate-800 text-base">Your trip is empty</h3>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                You haven't saved any places yet. Click the heart icon or "+ Add to Trip" on any destination to build your trip.
-              </p>
-              <button
-                onClick={() => setActiveTab('explore')}
-                className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-semibold cursor-pointer"
-              >
-                Explore Places Now
-              </button>
+            <div className="text-left pr-1">
+              <span className="text-[10px] uppercase font-bold text-orange-400 block tracking-wider">
+                My Trip Route
+              </span>
+              <span className="text-xs font-bold text-slate-100 group-hover:text-white">
+                {tripRoute.totalDistanceKm} km · View Route →
+              </span>
             </div>
-          )}
+          </button>
         </div>
       )}
 
@@ -524,7 +508,9 @@ export default function App() {
   return (
     <LocationProvider>
       <PreferencesProvider>
-        <MainAppContent />
+        <TripProvider>
+          <MainAppContent />
+        </TripProvider>
       </PreferencesProvider>
     </LocationProvider>
   );

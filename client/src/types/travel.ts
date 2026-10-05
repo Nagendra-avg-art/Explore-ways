@@ -111,5 +111,41 @@ export interface UserPreferences {
   isConfigured: boolean;
 }
 
+export interface RouteLeg {
+  legIndex: number;
+  fromName: string;
+  toName: string;
+  fromLat: number;
+  fromLon: number;
+  toLat: number;
+  toLon: number;
+  distanceKm: number;
+  estimatedTravelTimeMin: number;
+  modeEstimates: {
+    walk: { timeMin: number; costInr: number };
+    auto: { timeMin: number; costInr: number };
+    cab: { timeMin: number; costInr: number };
+    bus: { timeMin: number; costInr: number };
+  };
+}
+
+export interface TripRoute {
+  origin: {
+    label: string;
+    lat: number;
+    lon: number;
+    isActualGps: boolean;
+  };
+  stops: Place[];
+  legs: RouteLeg[];
+  totalDistanceKm: number;
+  totalTravelTimeMin: number;
+  totalVisitTimeMin: number;
+  totalEstimatedDurationMin: number;
+  isOptimized: boolean;
+  distanceSavedKm?: number;
+}
+
+
 
 

@@ -8,11 +8,14 @@ import {
   Heart, 
   Check, 
   Layers, 
-  Crosshair
+  Crosshair,
+  Sparkles,
+  Route
 } from 'lucide-react';
 import { DEMO_PLACES, TRAVEL_CATEGORIES } from '../data/demoPlaces';
 import { Place, CategoryId } from '../types/travel';
 import { useLocation } from '../context/LocationContext';
+import { useTrip } from '../context/TripContext';
 
 interface MapViewProps {
   onViewDetails: (place: Place) => void;
@@ -28,6 +31,7 @@ export const MapView: React.FC<MapViewProps> = ({
   initialSelectedPlaceId,
 }) => {
   const { location } = useLocation();
+  const { tripPlaces, tripRoute, isOptimized, optimizeTripRoute, distanceSavedKm } = useTrip();
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
@@ -113,6 +117,9 @@ export const MapView: React.FC<MapViewProps> = ({
     displayedPlaces.forEach((place) => {
       const isSelected = selectedPlace?.id === place.id;
       const isSaved = savedPlaceIds.includes(place.id);
+      const tripStopIndex = tripPlaces.findIndex((p) => p.id === place.id);
+      const isTripStop = tripStopIndex !== -1;
+      const stopNumber = tripStopIndex + 1;
 
       // Category icon lookup
       const cat = TRAVEL_CATEGORIES.find((c) => c.id === place.category);
@@ -125,16 +132,18 @@ export const MapView: React.FC<MapViewProps> = ({
           <div class="px-2 py-1 rounded-xl flex items-center space-x-1 border shadow-md ${
             isSelected
               ? 'bg-orange-500 text-white border-white ring-3 ring-orange-300'
+              : isTripStop
+              ? 'bg-sky-700 text-white border-white ring-2 ring-sky-300'
               : isSaved
               ? 'bg-emerald-600 text-white border-white'
               : 'bg-white text-slate-800 border-slate-200 hover:border-sky-400'
           }">
-            <span class="text-xs">${iconEmoji}</span>
+            ${isTripStop ? `<span class="w-4 h-4 rounded-full bg-orange-500 text-white text-[10px] font-black flex items-center justify-center -ml-0.5">${stopNumber}</span>` : `<span class="text-xs">${iconEmoji}</span>`}
             <span class="text-[11px] font-bold truncate max-w-[70px] sm:max-w-[100px]">${place.name}</span>
           </div>
           <!-- Pin pointer beak -->
           <div class="w-2 h-2 mx-auto rotate-45 -mt-1 ${
-            isSelected ? 'bg-orange-500' : isSaved ? 'bg-emerald-600' : 'bg-white'
+            isSelected ? 'bg-orange-500' : isTripStop ? 'bg-sky-700' : isSaved ? 'bg-emerald-600' : 'bg-white'
           }"></div>
         </div>
       `;
@@ -142,8 +151,8 @@ export const MapView: React.FC<MapViewProps> = ({
       const markerIcon = L.divIcon({
         className: 'custom-place-pin',
         html: customHtml,
-        iconSize: [100, 34],
-        iconAnchor: [50, 34],
+        iconSize: [110, 34],
+        iconAnchor: [55, 34],
       });
 
       const marker = L.marker([place.lat, place.lon], { icon: markerIcon });
@@ -156,21 +165,36 @@ export const MapView: React.FC<MapViewProps> = ({
       marker.addTo(markersGroup);
     });
 
-    // 3. Draw Route Polyline from User Location to Selected Place or Saved Places
+    // 3. Draw Route Polyline from User Location to Multi-Stop Itinerary or Selected Place
     if (routePolylineRef.current) {
       routePolylineRef.current.remove();
       routePolylineRef.current = null;
     }
 
-    if (location && selectedPlace) {
-      // Connect User -> Selected Place
+    if (location && tripPlaces.length > 0) {
+      // Multi-Stop Itinerary: User GPS -> Stop 1 -> Stop 2 -> ...
+      const latlngs: [number, number][] = [
+        [location.lat, location.lon],
+        ...tripPlaces.map((p): [number, number] => [p.lat, p.lon]),
+      ];
+
+      const polyline = L.polyline(latlngs, {
+        color: '#0284c7', // Sky Blue
+        weight: 4,
+        opacity: 0.85,
+        dashArray: '8, 8',
+      }).addTo(map);
+
+      routePolylineRef.current = polyline;
+    } else if (location && selectedPlace) {
+      // Single leg fallback
       const latlngs: [number, number][] = [
         [location.lat, location.lon],
         [selectedPlace.lat, selectedPlace.lon],
       ];
 
       const polyline = L.polyline(latlngs, {
-        color: '#0284c7', // Sky Blue
+        color: '#0284c7',
         weight: 3.5,
         opacity: 0.8,
         dashArray: '6, 8',
@@ -178,7 +202,7 @@ export const MapView: React.FC<MapViewProps> = ({
 
       routePolylineRef.current = polyline;
     }
-  }, [location, displayedPlaces, selectedPlace, savedPlaceIds]);
+  }, [location, displayedPlaces, selectedPlace, savedPlaceIds, tripPlaces, isOptimized]);
 
   // Center on User GPS
   const handleCenterOnUser = () => {
@@ -246,6 +270,45 @@ export const MapView: React.FC<MapViewProps> = ({
             })}
           </div>
         </div>
+
+        {/* Floating Route Overview Overlay on Map */}
+        {tripPlaces.length > 0 && (
+          <div className="absolute top-16 left-4 z-20 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/90 shadow-lg p-3 sm:p-4 max-w-[280px] sm:max-w-xs animate-fadeIn">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center space-x-2">
+                <div className="w-7 h-7 rounded-lg bg-sky-600 text-white flex items-center justify-center shrink-0">
+                  <Route className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-sky-700 uppercase tracking-wider block">
+                    Active Trip Route
+                  </span>
+                  <h4 className="text-xs sm:text-sm font-black text-slate-900 leading-tight">
+                    {tripPlaces.length} Stops · {tripRoute.totalDistanceKm} km
+                  </h4>
+                </div>
+              </div>
+
+              {isOptimized ? (
+                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold shrink-0">
+                  ⚡ {distanceSavedKm > 0 ? `Saved ${distanceSavedKm} km` : 'Optimized'}
+                </span>
+              ) : tripPlaces.length > 1 ? (
+                <button
+                  onClick={optimizeTripRoute}
+                  className="px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold rounded-lg shadow-xs transition-colors shrink-0 cursor-pointer flex items-center space-x-1"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>Optimize</span>
+                </button>
+              ) : null}
+            </div>
+
+            <p className="text-[11px] text-slate-500 mt-2 truncate">
+              {tripPlaces.map((p, i) => `${i + 1}. ${p.name}`).join(' → ')}
+            </p>
+          </div>
+        )}
 
         {/* Floating Control Buttons (Bottom-Left on Desktop / Top-Right on Mobile) */}
         <div className="absolute bottom-6 left-4 z-20 flex flex-col space-y-2">
@@ -342,7 +405,9 @@ export const MapView: React.FC<MapViewProps> = ({
                   {savedPlaceIds.includes(selectedPlace.id) ? (
                     <>
                       <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                      <span>In My Trip</span>
+                      <span>
+                        In My Trip {tripPlaces.findIndex(p => p.id === selectedPlace.id) !== -1 ? `(Stop #${tripPlaces.findIndex(p => p.id === selectedPlace.id) + 1})` : ''}
+                      </span>
                     </>
                   ) : (
                     <>
