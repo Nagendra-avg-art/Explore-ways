@@ -310,90 +310,131 @@ export const MapView: React.FC<MapViewProps> = ({
 
         {/* Floating Route Overview Overlay on Map */}
         {tripPlaces.length > 0 && (
-          <div className="absolute top-16 left-4 z-20 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/90 shadow-lg p-3 sm:p-4 max-w-[280px] sm:max-w-xs animate-fadeIn">
+          <div className="absolute top-16 left-4 z-20 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200/90 shadow-xl p-3.5 sm:p-4 w-[calc(100%-2rem)] sm:w-84 max-w-sm animate-fadeIn space-y-2.5">
+            {/* Header: Title & Road Badge */}
             <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center space-x-2">
-                <div className="w-7 h-7 rounded-lg bg-sky-600 text-white flex items-center justify-center shrink-0">
-                  <Route className="w-4 h-4" />
+              <div className="flex items-center space-x-1.5">
+                <div className="w-6 h-6 rounded-lg bg-sky-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                  <Route className="w-3.5 h-3.5" />
                 </div>
-                <div>
-                  <div className="flex items-center space-x-1.5">
-                    <span className="text-[10px] font-bold text-sky-700 uppercase tracking-wider block">
-                      Active Trip Route
-                    </span>
-                    {tripRoute.isRoadNetwork ? (
-                      <span className="px-1.5 py-0.2 text-[9px] font-extrabold rounded-md bg-sky-100 text-sky-800">
-                        🛣️ Road
-                      </span>
-                    ) : (
-                      <span className="px-1.5 py-0.2 text-[9px] font-medium rounded-md bg-slate-100 text-slate-600">
-                        📐 Direct
-                      </span>
-                    )}
-                  </div>
-                  <h4 className="text-xs sm:text-sm font-black text-slate-900 leading-tight">
-                    {tripPlaces.length} Stops · {tripRoute.totalDistanceKm} km
-                  </h4>
-                  <span className="text-[10px] text-slate-500 block">
-                    {preferredMode === 'bus'
-                      ? '🚌 Bus / Metro: Route unavailable (Not available)'
-                      : `~${tripRoute.selectedModeTimeDisplay || `${tripRoute.totalTravelTimeMin} min`} via ${
-                          preferredMode === 'walk'
-                            ? 'Walking (Road route)'
-                            : preferredMode === 'cab'
-                            ? 'Cab (Estimated)'
-                            : 'Auto (Estimated)'
-                        }`}
-                  </span>
-                </div>
+                <span className="text-[11px] font-extrabold text-sky-800 uppercase tracking-wider block">
+                  Active Trip Route
+                </span>
               </div>
+              {tripRoute.isRoadNetwork ? (
+                <span className="px-2 py-0.5 text-[9px] font-extrabold rounded-md bg-sky-100 text-sky-800 border border-sky-200/60 shadow-2xs">
+                  🛣️ Road Route
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 text-[9px] font-semibold rounded-md bg-slate-100 text-slate-600">
+                  📐 Direct
+                </span>
+              )}
+            </div>
 
-              {/* Interactive Quick Mode Switcher */}
-              <div className="flex items-center space-x-1 pt-2 mt-2 border-t border-slate-100">
-                <span className="text-[10px] font-bold text-slate-400 mr-0.5">Mode:</span>
+            {/* Explicit Starting Point */}
+            <div className="flex items-center space-x-1 text-xs font-bold text-slate-800">
+              <span className="text-sm">📍</span>
+              <span className="text-slate-500 font-semibold">Starting from</span>
+              <span className="text-slate-900 font-extrabold underline decoration-sky-400 decoration-2 underline-offset-2">
+                {location?.city || location?.area || tripRoute.origin.label || 'Current Location'}
+              </span>
+            </div>
+
+            {/* Distance & Travel Time Stats */}
+            <div className="bg-slate-50/90 rounded-xl p-2.5 border border-slate-100/90">
+              <div className="flex items-baseline justify-between gap-2">
+                <h4 className="text-xs sm:text-sm font-black text-slate-900 leading-tight">
+                  {tripPlaces.length} Stops · {tripRoute.totalDistanceKm} km
+                </h4>
+                <span className="text-xs font-black text-slate-800 shrink-0">
+                  {preferredMode === 'bus'
+                    ? 'Unavailable'
+                    : `~${tripRoute.selectedModeTimeDisplay || `${tripRoute.totalTravelTimeMin} min`}`}
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-500 font-medium block mt-0.5">
+                {preferredMode === 'bus'
+                  ? 'Bus / Metro: Route unavailable (Not available)'
+                  : `via ${
+                      preferredMode === 'walk'
+                        ? 'Walking (Road route)'
+                        : preferredMode === 'cab'
+                        ? 'Cab (Estimated)'
+                        : 'Auto (Estimated)'
+                    }`}
+              </span>
+            </div>
+
+            {/* Explicit Waypoint Chain: Starting City → Stop 1 → Stop 2 */}
+            <div className="text-[11px] text-slate-600 bg-white/90 rounded-xl p-2 border border-slate-100/80">
+              <div className="flex items-center flex-wrap gap-1 leading-relaxed">
+                <span className="font-extrabold text-sky-700 flex items-center space-x-0.5">
+                  <span>📍</span>
+                  <span>{location?.city || 'Origin'}</span>
+                </span>
+                {tripPlaces.map((p, i) => (
+                  <React.Fragment key={p.id}>
+                    <span className="text-slate-400 font-bold">→</span>
+                    <span className="font-bold text-slate-900">
+                      {i + 1}. {p.name}
+                    </span>
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+
+            {/* Transport Mode Switcher & Optimize Button (Guaranteed Wrapping & No Overflow) */}
+            <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1.5">
+              <div className="flex items-center flex-wrap gap-1">
                 {([
                   { id: 'walk' as const, label: 'Walk', icon: '🚶' },
                   { id: 'auto' as const, label: 'Auto', icon: '🛺' },
                   { id: 'cab' as const, label: 'Cab', icon: '🚕' },
                   { id: 'bus' as const, label: 'Bus', icon: '🚌' },
-                ]).map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPreferredMode(m.id);
-                    }}
-                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center space-x-0.5 ${
-                      preferredMode === m.id
-                        ? 'bg-sky-600 text-white shadow-2xs font-extrabold'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    <span>{m.icon}</span>
-                    <span>{m.label}</span>
-                  </button>
-                ))}
+                ]).map((m) => {
+                  const isSelected = preferredMode === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPreferredMode(m.id);
+                      }}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center space-x-1 shrink-0 ${
+                        isSelected
+                          ? 'bg-sky-600 text-white shadow-xs font-black ring-1 ring-sky-400'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
+                      }`}
+                    >
+                      <span>{m.icon}</span>
+                      <span>{m.label}</span>
+                    </button>
+                  );
+                })}
               </div>
 
               {isOptimized ? (
-                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold shrink-0">
-                  ⚡ {distanceSavedKm > 0 ? `Saved ${distanceSavedKm} km` : 'Optimized'}
+                <span className="px-2 py-1 rounded-lg bg-emerald-100 text-emerald-800 text-[10px] font-extrabold flex items-center space-x-1 shrink-0 border border-emerald-200">
+                  <span>⚡</span>
+                  <span>{distanceSavedKm > 0 ? `Saved ${distanceSavedKm} km` : 'Optimized'}</span>
                 </span>
               ) : tripPlaces.length > 1 ? (
                 <button
-                  onClick={optimizeTripRoute}
-                  className="px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold rounded-lg shadow-xs transition-colors shrink-0 cursor-pointer flex items-center space-x-1"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    optimizeTripRoute();
+                  }}
+                  className="px-2.5 py-1 bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-black rounded-lg shadow-xs transition-colors shrink-0 cursor-pointer flex items-center space-x-1"
+                  title="Optimize stop order using Nearest-Neighbor"
                 >
                   <Sparkles className="w-3 h-3" />
                   <span>Optimize</span>
                 </button>
               ) : null}
             </div>
-
-            <p className="text-[11px] text-slate-500 mt-2 truncate">
-              {tripPlaces.map((p, i) => `${i + 1}. ${p.name}`).join(' → ')}
-            </p>
           </div>
         )}
 
