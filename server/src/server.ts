@@ -16,6 +16,8 @@ app.use(cors({
 }));
 app.use(express.json());
 
+import locationRoutes from './routes/locationRoutes.js';
+
 // Basic health check endpoint
 app.get('/api/health', (req: Request, res: Response) => {
   res.status(200).json({
@@ -26,6 +28,9 @@ app.get('/api/health', (req: Request, res: Response) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// Location & Geocoding routes
+app.use('/api/location', locationRoutes);
 
 // Start listening
 app.listen(PORT, () => {

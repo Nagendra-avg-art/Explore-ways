@@ -52,3 +52,25 @@ export type TimeOption = '2h' | '4h' | 'halfDay' | 'fullDay';
 export type BudgetOption = '500' | '1000' | '2000' | '5000';
 export type SortOption = 'recommended' | 'distance' | 'rating';
 
+export type LocationStatus = 
+  | 'idle' 
+  | 'detecting' 
+  | 'granted' 
+  | 'denied' 
+  | 'unavailable' 
+  | 'timeout' 
+  | 'error';
+
+export interface GeoLocation {
+  lat: number;
+  lon: number;
+  city: string;
+  area: string;
+  state?: string;
+  country?: string;
+  formatted: string;
+  fullAddress?: string;
+  isManual?: boolean;
+}
+
+

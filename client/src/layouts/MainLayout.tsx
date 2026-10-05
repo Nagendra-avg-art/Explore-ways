@@ -18,6 +18,7 @@ interface MainLayoutProps {
   activeTab: NavTab;
   onTabChange: (tab: NavTab) => void;
   currentCity?: string;
+  onOpenLocationModal?: () => void;
   backendHealth: {
     status: string;
     loading: boolean;
@@ -31,6 +32,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   activeTab,
   onTabChange,
   currentCity = 'Hyderabad, IN',
+  onOpenLocationModal,
   backendHealth,
   savedPlacesCount = 0,
 }) => {
@@ -99,11 +101,16 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
 
           {/* Right Area: Location & Backend Status */}
           <div className="flex items-center space-x-2 sm:space-x-3">
-            {/* Location Pill */}
-            <div className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 bg-sky-50 text-sky-800 rounded-full border border-sky-100 text-xs font-medium">
-              <MapPin className="w-3.5 h-3.5 text-sky-600" />
-              <span>{currentCity}</span>
-            </div>
+            {/* Interactive Location Pill */}
+            <button
+              onClick={onOpenLocationModal}
+              title="Click to change your location"
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 rounded-full border border-sky-100 text-xs font-semibold transition-all cursor-pointer shadow-2xs group"
+            >
+              <MapPin className="w-3.5 h-3.5 text-sky-600 group-hover:scale-110 transition-transform" />
+              <span className="max-w-[140px] sm:max-w-[190px] truncate">{currentCity}</span>
+              <span className="text-[10px] text-sky-500 font-normal hidden sm:inline">(Change)</span>
+            </button>
 
             {/* Backend Health Chip */}
             {backendHealth.loading ? (

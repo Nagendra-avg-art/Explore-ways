@@ -4,7 +4,9 @@ import { CategoryPills } from './components/CategoryPills';
 import { PlaceCard } from './components/PlaceCard';
 import { PlanDayWidget } from './components/PlanDayWidget';
 import { PlaceDetailsModal } from './components/PlaceDetailsModal';
+import { LocationModal } from './components/LocationModal';
 import { ExploreView } from './components/ExploreView';
+import { LocationProvider, useLocation } from './context/LocationContext';
 import { DEMO_PLACES } from './data/demoPlaces';
 import { CategoryId, Place } from './types/travel';
 import { 
@@ -12,12 +14,14 @@ import {
   Route, 
   Sparkles, 
   Search, 
-  Info,
-  Compass,
-  Map as MapIcon,
-  Calendar,
-  Heart,
-  Bot
+  Info, 
+  Compass, 
+  Map as MapIcon, 
+  Calendar, 
+  Heart, 
+  Bot,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 
 interface BackendHealth {
@@ -28,11 +32,19 @@ interface BackendHealth {
   timestamp: string;
 }
 
-export default function App() {
+function MainAppContent() {
   const [activeTab, setActiveTab] = useState<NavTab>('home');
   const [health, setHealth] = useState<BackendHealth | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Location Context
+  const { 
+    location, 
+    status: locationStatus, 
+    detectLocation, 
+    setIsLocationModalOpen 
+  } = useLocation();
 
   // Discovery state
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
@@ -71,44 +83,48 @@ export default function App() {
     });
   }, [selectedCategory, searchQuery]);
 
-  // Saved Places objects
+  // Saved Places
   const savedPlaces = useMemo(() => {
     return DEMO_PLACES.filter(p => savedPlaceIds.includes(p.id));
   }, [savedPlaceIds]);
 
-  // Toggle Save to Trip
   const toggleSavePlace = (placeId: string) => {
     setSavedPlaceIds((prev) =>
       prev.includes(placeId) ? prev.filter((id) => id !== placeId) : [...prev, placeId]
     );
   };
 
-  // Dynamic Section Title
+  const handleExploreNearMe = async () => {
+    await detectLocation();
+    const el = document.getElementById('discovery-section');
+    el?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   const getSectionTitle = () => {
     if (searchQuery.trim()) {
       return `Search Results for "${searchQuery}"`;
     }
     switch (selectedCategory) {
       case 'temples':
-        return 'Sacred Temples & Shrines Near You';
+        return `Sacred Temples & Shrines near ${location.city}`;
       case 'history':
-        return 'Historic Landmarks & Citadels';
+        return `Historic Landmarks & Citadels in ${location.city}`;
       case 'food':
-        return 'Must-Try Local Food & Culinary Heritage';
+        return `Must-Try Local Food & Culinary Heritage in ${location.city}`;
       case 'cafes':
-        return 'Heritage Cafes & Irani Chai Spots';
+        return `Heritage Cafes & Irani Chai Spots near ${location.city}`;
       case 'nature':
-        return 'Waterfronts, Lakes & Scenic Parks';
+        return `Waterfronts, Lakes & Scenic Parks near ${location.city}`;
       case 'architecture':
-        return 'Royal Palaces & Architectural Wonders';
+        return `Royal Palaces & Architectural Wonders in ${location.city}`;
       case 'shopping':
-        return 'Traditional Bazaars & Shopping Streets';
+        return `Traditional Bazaars & Shopping Streets in ${location.city}`;
       case 'photography':
-        return 'Top Scenic Photography Vantage Points';
+        return `Top Scenic Photography Vantage Points in ${location.city}`;
       case 'culture':
-        return 'Artisan Villages & Folk Cultural Venues';
+        return `Artisan Villages & Folk Cultural Venues in ${location.city}`;
       default:
-        return 'Recommended Highlights Near You';
+        return `Recommended Highlights Near ${location.city}`;
     }
   };
 
@@ -116,7 +132,8 @@ export default function App() {
     <MainLayout
       activeTab={activeTab}
       onTabChange={setActiveTab}
-      currentCity="Hyderabad, IN"
+      currentCity={location.formatted}
+      onOpenLocationModal={() => setIsLocationModalOpen(true)}
       backendHealth={{
         status: health?.status || 'unknown',
         loading,
@@ -124,9 +141,10 @@ export default function App() {
       }}
       savedPlacesCount={savedPlaceIds.length}
     >
-      {/* ============================================================== */}
-      {/* PLACE DETAILS MODAL (ACCESSIBLE FROM ANY CARD) */}
-      {/* ============================================================== */}
+      {/* Location Selector Modal */}
+      <LocationModal />
+
+      {/* Place Details Modal */}
       <PlaceDetailsModal
         place={selectedPlaceForModal}
         isOpen={!!selectedPlaceForModal}
@@ -159,18 +177,40 @@ export default function App() {
               Discover places, food, culture, and hidden gems around you. Plan smarter routes and make the most of your time.
             </p>
 
-            {/* Hero CTAs */}
+            {/* Location Status Alert / Toast */}
+            {locationStatus === 'denied' && (
+              <div className="mt-5 max-w-md mx-auto p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-2 shadow-2xs text-left">
+                <div className="flex items-center space-x-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>GPS denied. Choose your city manually:</span>
+                </div>
+                <button
+                  onClick={() => setIsLocationModalOpen(true)}
+                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-[11px] shrink-0 cursor-pointer"
+                >
+                  Pick City
+                </button>
+              </div>
+            )}
+
+            {/* CTAs */}
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3.5 max-w-md mx-auto">
               <button 
-                onClick={() => {
-                  setSelectedCategory('all');
-                  const el = document.getElementById('discovery-section');
-                  el?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="w-full sm:w-auto inline-flex items-center justify-center space-x-2 px-6 py-3.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold text-sm shadow-md shadow-orange-500/20 active:scale-98 transition-all duration-150 cursor-pointer min-h-[48px]"
+                onClick={handleExploreNearMe}
+                disabled={locationStatus === 'detecting'}
+                className="w-full sm:w-auto inline-flex items-center justify-center space-x-2 px-6 py-3.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold text-sm shadow-md shadow-orange-500/20 active:scale-98 transition-all duration-150 cursor-pointer min-h-[48px] disabled:opacity-75"
               >
-                <MapPin className="w-4 h-4" />
-                <span>Explore Near Me</span>
+                {locationStatus === 'detecting' ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Detecting GPS Location...</span>
+                  </>
+                ) : (
+                  <>
+                    <MapPin className="w-4 h-4" />
+                    <span>Explore Near Me</span>
+                  </>
+                )}
               </button>
 
               <button 
@@ -185,7 +225,7 @@ export default function App() {
               </button>
             </div>
 
-            {/* Quick Search */}
+            {/* Search Bar */}
             <div className="mt-8 max-w-xl mx-auto">
               <div className="relative flex items-center shadow-xs rounded-2xl bg-white border border-slate-200 focus-within:border-sky-500 focus-within:ring-3 focus-within:ring-sky-100 transition-all p-1.5">
                 <div className="pl-3.5 text-slate-400">
@@ -234,7 +274,7 @@ export default function App() {
               </div>
               <div className="flex items-center space-x-2 text-xs text-slate-500">
                 <Info className="w-3.5 h-3.5 text-sky-500" />
-                <span>Controlled Demo Places ({filteredPlaces.length} available)</span>
+                <span>Current Hub: {location.formatted}</span>
               </div>
             </div>
 
@@ -280,9 +320,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ============================================================== */}
       {/* TAB 2: EXPLORE DIRECTORY VIEW */}
-      {/* ============================================================== */}
       {activeTab === 'explore' && (
         <ExploreView
           onViewDetails={(p) => setSelectedPlaceForModal(p)}
@@ -291,19 +329,17 @@ export default function App() {
         />
       )}
 
-      {/* ============================================================== */}
-      {/* TAB 3: MAP VIEW (UPCOMING PHASE 4) */}
-      {/* ============================================================== */}
+      {/* TAB 3: MAP VIEW (PHASE 4) */}
       {activeTab === 'map' && (
         <div className="bg-white rounded-3xl border border-slate-200 p-8 sm:p-12 text-center space-y-4 shadow-xs animate-fadeIn">
           <div className="w-14 h-14 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center mx-auto shadow-xs">
             <MapIcon className="w-7 h-7" />
           </div>
           <div className="max-w-md mx-auto space-y-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-sky-600">Upcoming Feature</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-sky-600">Upcoming in Phase 4</span>
             <h2 className="text-2xl font-extrabold text-slate-900">Interactive Map View</h2>
             <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
-              In Phase 4, we will integrate Leaflet & OpenStreetMap to display your live GPS location, destination markers, route polylines, and interactive place popups.
+              In Phase 4, we will plot your live GPS coordinates ({location.lat.toFixed(3)}, {location.lon.toFixed(3)}) with destination markers and route lines on an interactive map.
             </p>
           </div>
           <button
@@ -315,19 +351,17 @@ export default function App() {
         </div>
       )}
 
-      {/* ============================================================== */}
-      {/* TAB 4: PLAN VIEW (UPCOMING PHASES 8 & 11) */}
-      {/* ============================================================== */}
+      {/* TAB 4: PLAN VIEW */}
       {activeTab === 'plan' && (
         <div className="bg-white rounded-3xl border border-slate-200 p-8 sm:p-12 text-center space-y-4 shadow-xs animate-fadeIn">
           <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto shadow-xs">
             <Calendar className="w-7 h-7" />
           </div>
           <div className="max-w-md mx-auto space-y-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-600">Upcoming Feature</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-600">Upcoming in Phases 8 & 11</span>
             <h2 className="text-2xl font-extrabold text-slate-900">Multi-Stop Route & Day Planner</h2>
             <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
-              In Phases 8 & 11, we will implement distance matrix calculations, travel-time optimization, and sequential itinerary timelines for full-day trips.
+              In Phases 8 & 11, we will implement distance matrix calculations, travel-time optimization, and sequential itinerary timelines.
             </p>
           </div>
           <button
@@ -339,33 +373,29 @@ export default function App() {
         </div>
       )}
 
-      {/* ============================================================== */}
-      {/* TAB 5: AI GUIDE (UPCOMING PHASE 12) */}
-      {/* ============================================================== */}
+      {/* TAB 5: AI GUIDE */}
       {activeTab === 'ai' && (
         <div className="bg-white rounded-3xl border border-slate-200 p-8 sm:p-12 text-center space-y-4 shadow-xs animate-fadeIn">
           <div className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mx-auto shadow-xs">
             <Bot className="w-7 h-7" />
           </div>
           <div className="max-w-md mx-auto space-y-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-teal-600">Upcoming Feature</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-teal-600">Upcoming in Phase 12</span>
             <h2 className="text-2xl font-extrabold text-slate-900">Your AI Local Travel Guide</h2>
             <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
-              In Phase 12, we will integrate a contextual AI assistant grounded in retrieved destination data, answering questions like <em>"I have 3 hours and love old architecture, where should I go first?"</em>
+              In Phase 12, we will integrate a contextual AI assistant grounded in retrieved destination data for {location.city}.
             </p>
           </div>
         </div>
       )}
 
-      {/* ============================================================== */}
-      {/* TAB 6: MY TRIP (SAVED PLACES) */}
-      {/* ============================================================== */}
+      {/* TAB 6: MY TRIP */}
       {activeTab === 'mytrip' && (
         <div className="space-y-6 animate-fadeIn">
           <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-rose-600">Your Saved Places</span>
-              <h2 className="text-2xl font-extrabold text-slate-900">My Hyderabad Trip</h2>
+              <h2 className="text-2xl font-extrabold text-slate-900">My Saved Trip</h2>
               <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
                 You have saved <strong>{savedPlaces.length}</strong> destinations to your personal trip list.
               </p>
@@ -413,5 +443,13 @@ export default function App() {
       )}
 
     </MainLayout>
+  );
+}
+
+export default function App() {
+  return (
+    <LocationProvider>
+      <MainAppContent />
+    </LocationProvider>
   );
 }
