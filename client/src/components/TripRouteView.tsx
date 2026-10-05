@@ -474,7 +474,11 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
                           <span>Visit: <strong>{place.visitDuration}</strong></span>
                         </span>
                         <span>•</span>
-                        <span>⭐ {place.rating} ({place.reviewCount.toLocaleString()})</span>
+                        <span>
+                          {place.rating !== undefined 
+                            ? `⭐ ${place.rating} ${place.reviewCount ? `(${place.reviewCount.toLocaleString()})` : ''}` 
+                            : '⭐ Unrated'}
+                        </span>
                       </div>
                     </div>
                   </div>

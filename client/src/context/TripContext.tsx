@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useMemo, ReactNo
 import { Place, TripRoute } from '../types/travel';
 import { DEMO_PLACES } from '../data/demoPlaces';
 import { useLocation } from './LocationContext';
+import { usePlaces } from './PlacesContext';
 import { 
   calculateTripRoute, 
   optimizeRouteNearestNeighbor 
@@ -32,6 +33,7 @@ const TripContext = createContext<TripContextType | undefined>(undefined);
 
 export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { location } = useLocation();
+  const { knownPlacesMap, registerPlace } = usePlaces();
 
   // Load initial saved place IDs from localStorage, defaulting to Charminar and Golconda
   const [manualPlaceIds, setManualPlaceIds] = useState<string[]>(() => {
@@ -66,18 +68,18 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Convert IDs to Place objects (preserves order)
   const manualStops: Place[] = useMemo(() => {
     return manualPlaceIds
-      .map((id) => DEMO_PLACES.find((p) => p.id === id))
+      .map((id) => knownPlacesMap[id] || DEMO_PLACES.find((p) => p.id === id))
       .filter((p): p is Place => Boolean(p));
-  }, [manualPlaceIds]);
+  }, [manualPlaceIds, knownPlacesMap]);
 
   // Active places list depending on whether route optimization is enabled
   const activeStops: Place[] = useMemo(() => {
     if (!isOptimized) return manualStops;
     const optPlaces = optimizedPlaceIds
-      .map((id) => DEMO_PLACES.find((p) => p.id === id))
+      .map((id) => knownPlacesMap[id] || DEMO_PLACES.find((p) => p.id === id))
       .filter((p): p is Place => Boolean(p));
     return optPlaces.length === manualStops.length ? optPlaces : manualStops;
-  }, [isOptimized, optimizedPlaceIds, manualStops]);
+  }, [isOptimized, optimizedPlaceIds, manualStops, knownPlacesMap]);
 
   // Active Place IDs
   const tripPlaceIds = useMemo(() => {
@@ -114,6 +116,7 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Add a place
   const addToTrip = (place: Place) => {
+    registerPlace(place);
     if (manualPlaceIds.includes(place.id)) return;
     const updated = [...manualPlaceIds, place.id];
     setManualPlaceIds(updated);
@@ -121,7 +124,7 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (isOptimized) {
       // Re-run optimization with the newly added place included
       const allUpdatedPlaces = updated
-        .map((id) => DEMO_PLACES.find((p) => p.id === id))
+        .map((id) => (id === place.id ? place : knownPlacesMap[id] || DEMO_PLACES.find((p) => p.id === id)))
         .filter((p): p is Place => Boolean(p));
       const res = optimizeRouteNearestNeighbor(
         { lat: location.lat, lon: location.lon },
@@ -139,7 +142,7 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     if (isOptimized) {
       const allUpdatedPlaces = updated
-        .map((id) => DEMO_PLACES.find((p) => p.id === id))
+        .map((id) => knownPlacesMap[id] || DEMO_PLACES.find((p) => p.id === id))
         .filter((p): p is Place => Boolean(p));
       const res = optimizeRouteNearestNeighbor(
         { lat: location.lat, lon: location.lon },

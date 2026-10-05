@@ -27,7 +27,7 @@ export const PlaceCard: React.FC<PlaceCardProps> = ({
             loading="lazy"
           />
           
-          {/* Top Left Badges: Match % & Category */}
+          {/* Top Left Badges: Match % & Category & Source */}
           <div className="absolute top-3 left-3 flex flex-wrap items-center gap-1.5 max-w-[80%]">
             {place.matchScore !== undefined && (
               <span className={`text-[11px] font-extrabold px-2.5 py-1 rounded-lg shadow-xs flex items-center space-x-1 ${
@@ -44,6 +44,16 @@ export const PlaceCard: React.FC<PlaceCardProps> = ({
             <div className="bg-white/95 backdrop-blur-xs text-slate-800 text-[11px] font-semibold px-2 py-1 rounded-lg shadow-xs">
               {place.categoryLabel}
             </div>
+            {place.source === 'live' ? (
+              <div className="bg-emerald-600/95 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-lg shadow-xs flex items-center space-x-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                <span>Live POI</span>
+              </div>
+            ) : (
+              <div className="bg-amber-500/95 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-lg shadow-xs">
+                <span>Demo Hub</span>
+              </div>
+            )}
           </div>
 
           {/* Heart / Save Button */}
@@ -59,15 +69,23 @@ export const PlaceCard: React.FC<PlaceCardProps> = ({
             <Heart className={`w-4 h-4 ${isSaved ? 'fill-rose-500 text-rose-500' : ''}`} />
           </button>
 
-          {/* Star Rating Badge */}
-          <div className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-xs text-slate-900 text-xs font-bold px-2.5 py-1 rounded-lg shadow-xs flex items-center space-x-1">
-            <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
-            <span>{place.rating.toFixed(1)}</span>
-            <span className="text-slate-400 font-normal">({(place.reviewCount / 1000).toFixed(1)}k)</span>
-          </div>
+          {/* Star Rating Badge (Safe if unrated) */}
+          {place.rating !== undefined && place.rating !== null ? (
+            <div className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-xs text-slate-900 text-xs font-bold px-2.5 py-1 rounded-lg shadow-xs flex items-center space-x-1">
+              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
+              <span>{place.rating.toFixed(1)}</span>
+              {place.reviewCount ? (
+                <span className="text-slate-400 font-normal">({(place.reviewCount / 1000).toFixed(1)}k)</span>
+              ) : null}
+            </div>
+          ) : (
+            <div className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-xs text-slate-500 text-[11px] font-semibold px-2 py-1 rounded-lg shadow-xs flex items-center space-x-1">
+              <span>Unrated (OSM)</span>
+            </div>
+          )}
 
           {/* Open / Closed Status Pill */}
-          {place.isOpenNow !== undefined && (
+          {place.isOpenNow !== undefined ? (
             <div className={`absolute bottom-3 left-3 text-[11px] font-bold px-2.5 py-1 rounded-lg backdrop-blur-xs shadow-xs flex items-center space-x-1.5 ${
               place.isOpenNow 
                 ? 'bg-emerald-950/85 text-emerald-300' 
@@ -75,6 +93,10 @@ export const PlaceCard: React.FC<PlaceCardProps> = ({
             }`}>
               <span className={`w-1.5 h-1.5 rounded-full ${place.isOpenNow ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
               <span>{place.isOpenNow ? 'Open Now' : 'Closed'}</span>
+            </div>
+          ) : (
+            <div className="absolute bottom-3 left-3 text-[10px] font-medium px-2 py-0.5 rounded-lg bg-slate-900/75 text-slate-300 backdrop-blur-xs">
+              <span>Hours not listed</span>
             </div>
           )}
         </div>
@@ -96,6 +118,11 @@ export const PlaceCard: React.FC<PlaceCardProps> = ({
               <MapPin className="w-3 h-3 text-sky-600" />
               <span>{place.distanceKm} km away</span>
             </span>
+            {place.address && (
+              <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 truncate max-w-[170px]" title={place.address}>
+                <span className="truncate">📍 {place.address}</span>
+              </span>
+            )}
             <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-md bg-slate-100">
               <Car className="w-3 h-3 text-amber-600" />
               <span>{place.travelTimeMin} min</span>

@@ -21,8 +21,8 @@ export interface RecommendedPlaceResponse {
   name: string;
   category: string;
   categoryLabel: string;
-  rating: number;
-  reviewCount: number;
+  rating?: number;
+  reviewCount?: number;
   lat: number;
   lon: number;
   distanceKm: number;
@@ -30,17 +30,20 @@ export interface RecommendedPlaceResponse {
   visitDuration: string;
   imageUrl: string;
   shortDescription: string;
-  fullDescription: string;
+  fullDescription?: string;
   whyRecommended: string;
   tags: string[];
-  openingHours: string;
-  isOpenNow: boolean;
-  entryFee: string;
-  nearbyFood: string[];
-  transportEstimates: { mode: string; label: string; time: string; cost: string; icon: string }[];
+  openingHours?: string;
+  isOpenNow?: boolean;
+  entryFee?: string;
+  nearbyFood?: string[];
+  transportEstimates?: { mode: string; label: string; time: string; cost: string; icon: string }[];
   matchScore: number;
   matchReasons: string[];
   scoreBreakdown: ScoreBreakdown;
+  source?: 'live' | 'demo';
+  sourceName?: string;
+  address?: string;
 }
 
 // Helper to convert human duration strings like '1–2 hrs' to numeric hours
@@ -86,7 +89,7 @@ export function scorePlaceForUser(
   scoreBreakdown: ScoreBreakdown;
   distanceKm: number;
   travelTimeMin: number;
-  isOpenNow: boolean;
+  isOpenNow: boolean | undefined;
 } {
   const distanceKm = calculateHaversineDistanceKm(userLat, userLon, place.lat, place.lon);
   const travelTimeMin = Math.max(5, Math.round(distanceKm * 2.5 + 4));
@@ -145,26 +148,28 @@ export function scorePlaceForUser(
   // 3. RATING & QUALITY SCORE (Weight: 15%)
   // =========================================================================
   let ratingScore = 50;
-  if (place.rating >= 4.8) {
-    ratingScore = 96;
-  } else if (place.rating >= 4.7) {
-    ratingScore = 88;
-  } else if (place.rating >= 4.6) {
-    ratingScore = 80;
-  } else if (place.rating >= 4.5) {
-    ratingScore = 70;
-  } else if (place.rating >= 4.4) {
-    ratingScore = 60;
-  } else {
-    ratingScore = 40;
-  }
+  if (place.rating !== undefined && place.rating !== null) {
+    if (place.rating >= 4.8) {
+      ratingScore = 96;
+    } else if (place.rating >= 4.7) {
+      ratingScore = 88;
+    } else if (place.rating >= 4.6) {
+      ratingScore = 80;
+    } else if (place.rating >= 4.5) {
+      ratingScore = 70;
+    } else if (place.rating >= 4.4) {
+      ratingScore = 60;
+    } else {
+      ratingScore = 40;
+    }
 
-  if (place.reviewCount > 15000) {
-    ratingScore = Math.min(100, ratingScore + 4);
-  }
+    if (place.reviewCount && place.reviewCount > 15000) {
+      ratingScore = Math.min(100, ratingScore + 4);
+    }
 
-  if (place.rating >= 4.7) {
-    reasons.push(`Top-rated: ${place.rating}★ (${place.reviewCount.toLocaleString()} reviews)`);
+    if (place.rating >= 4.7) {
+      reasons.push(`Top-rated: ${place.rating}★ (${place.reviewCount ? place.reviewCount.toLocaleString() : ''} reviews)`);
+    }
   }
 
   // =========================================================================
@@ -247,9 +252,12 @@ export function scorePlaceForUser(
   // =========================================================================
   // 6. OPERATING STATUS SCORE (Weight: 10%)
   // =========================================================================
-  let openStatusScore = isOpenNow ? 100 : 20;
-  if (isOpenNow) {
+  let openStatusScore = 60; // neutral default
+  if (isOpenNow === true) {
+    openStatusScore = 100;
     reasons.push('Open now for immediate visit');
+  } else if (isOpenNow === false) {
+    openStatusScore = 20;
   }
 
   // =========================================================================
@@ -367,8 +375,12 @@ export const getRecommendations = async (req: Request, res: Response) => {
     console.log(`[Recommendation Engine API] Recalculating: interests=[${interests.join(', ')}] hours=${availableHours} budget=₹${budgetAmount} style=${travelStyle} pace=${travelPace} origin=(${userLat}, ${userLon})`);
   }
 
+  const candidatePool: BackendPlace[] = Array.isArray(body.candidatePlaces) && body.candidatePlaces.length > 0
+    ? body.candidatePlaces
+    : PLACES_DATA;
+
   // 1. Score all places
-  let scoredPlaces: RecommendedPlaceResponse[] = PLACES_DATA.map((place) => {
+  let scoredPlaces: RecommendedPlaceResponse[] = candidatePool.map((place) => {
     const scoreResult = scorePlaceForUser(
       place,
       userLat,
@@ -402,7 +414,7 @@ export const getRecommendations = async (req: Request, res: Response) => {
   if (minRating !== undefined && minRating !== null) {
     const minRatingNum = typeof minRating === 'number' ? minRating : parseFloat(String(minRating));
     if (!isNaN(minRatingNum) && minRatingNum > 0) {
-      scoredPlaces = scoredPlaces.filter((p) => p.rating >= minRatingNum);
+      scoredPlaces = scoredPlaces.filter((p) => p.rating !== undefined && p.rating >= minRatingNum);
     }
   }
 
@@ -417,7 +429,7 @@ export const getRecommendations = async (req: Request, res: Response) => {
 
   return res.status(200).json({
     success: true,
-    totalCandidates: PLACES_DATA.length,
+    totalCandidates: candidatePool.length,
     count: topResults.length,
     total: topResults.length,
     appliedPreferences: {

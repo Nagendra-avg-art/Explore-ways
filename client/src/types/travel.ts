@@ -32,8 +32,8 @@ export interface Place {
   name: string;
   category: CategoryId;
   categoryLabel: string;
-  rating: number;
-  reviewCount: number;
+  rating?: number;
+  reviewCount?: number;
   distanceKm: number;
   travelTimeMin: number;
   visitDuration: string;
@@ -53,6 +53,9 @@ export interface Place {
   matchScore?: number;
   matchReasons?: string[];
   scoreBreakdown?: ScoreBreakdown;
+  source?: 'live' | 'demo';
+  sourceName?: string;
+  address?: string;
 }
 
 export interface ScoreBreakdown {

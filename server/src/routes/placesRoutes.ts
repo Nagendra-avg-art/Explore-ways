@@ -1,7 +1,10 @@
 import { Router } from 'express';
-import { getPlaces, getPlaceById } from '../controllers/placesController.js';
+import { getPlaces, getPlaceById, getNearbyPlaces } from '../controllers/placesController.js';
 
 const router = Router();
+
+// GET /api/places/nearby - Real OpenStreetMap Nearby POI discovery
+router.get('/nearby', getNearbyPlaces);
 
 // GET /api/places
 router.get('/', getPlaces);

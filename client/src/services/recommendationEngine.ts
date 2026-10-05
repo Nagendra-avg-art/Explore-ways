@@ -72,11 +72,11 @@ export function scorePlace(
   matchReasons: string[];
   scoreBreakdown: ScoreBreakdown;
   distanceKm: number;
-  isOpenNow: boolean;
+  isOpenNow?: boolean;
 } {
   const distanceKm = calculateHaversineDistanceKm(userLat, userLon, place.lat, place.lon);
   const travelTimeMin = Math.max(5, Math.round(distanceKm * 2.5 + 4));
-  const isOpenNow = getPlaceIsOpenNow(place.id);
+  const isOpenNow = place.isOpenNow !== undefined ? place.isOpenNow : getPlaceIsOpenNow(place.id);
   const reasons: string[] = [];
 
   // =========================================================================
@@ -130,26 +130,28 @@ export function scorePlace(
   // 3. RATING & QUALITY SCORE (Weight: 15%)
   // =========================================================================
   let ratingScore = 50;
-  if (place.rating >= 4.8) {
-    ratingScore = 96;
-  } else if (place.rating >= 4.7) {
-    ratingScore = 88;
-  } else if (place.rating >= 4.6) {
-    ratingScore = 80;
-  } else if (place.rating >= 4.5) {
-    ratingScore = 70;
-  } else if (place.rating >= 4.4) {
-    ratingScore = 60;
-  } else {
-    ratingScore = 40;
-  }
+  if (place.rating !== undefined && place.rating !== null) {
+    if (place.rating >= 4.8) {
+      ratingScore = 96;
+    } else if (place.rating >= 4.7) {
+      ratingScore = 88;
+    } else if (place.rating >= 4.6) {
+      ratingScore = 80;
+    } else if (place.rating >= 4.5) {
+      ratingScore = 70;
+    } else if (place.rating >= 4.4) {
+      ratingScore = 60;
+    } else {
+      ratingScore = 40;
+    }
 
-  if (place.reviewCount > 15000) {
-    ratingScore = Math.min(100, ratingScore + 4);
-  }
+    if (place.reviewCount && place.reviewCount > 15000) {
+      ratingScore = Math.min(100, ratingScore + 4);
+    }
 
-  if (place.rating >= 4.7) {
-    reasons.push(`Top-rated: ${place.rating}★ (${place.reviewCount.toLocaleString()} reviews)`);
+    if (place.rating >= 4.7) {
+      reasons.push(`Top-rated: ${place.rating}★ (${place.reviewCount ? place.reviewCount.toLocaleString() : ''} reviews)`);
+    }
   }
 
   // =========================================================================
@@ -231,9 +233,12 @@ export function scorePlace(
   // =========================================================================
   // 6. OPERATING STATUS SCORE (Weight: 10%)
   // =========================================================================
-  const openStatusScore = isOpenNow ? 100 : 20;
-  if (isOpenNow) {
+  let openStatusScore = 60; // neutral default if unlisted
+  if (isOpenNow === true) {
+    openStatusScore = 100;
     reasons.push('Open now for immediate visit');
+  } else if (isOpenNow === false) {
+    openStatusScore = 20;
   }
 
   // =========================================================================
@@ -336,7 +341,7 @@ export function rankPlacesForUser(
   }
 
   if (preferences.minRating && preferences.minRating > 0) {
-    scoredList = scoredList.filter((p) => p.rating >= preferences.minRating!);
+    scoredList = scoredList.filter((p) => p.rating !== undefined && p.rating >= preferences.minRating!);
   }
 
   if (preferences.openNowOnly) {

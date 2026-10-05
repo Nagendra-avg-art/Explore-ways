@@ -19,6 +19,7 @@ import { useTrip } from '../context/TripContext';
 import { ACTIVE_MAP_PROVIDER } from '../config/mapConfig';
 
 interface MapViewProps {
+  places?: Place[];
   onViewDetails: (place: Place) => void;
   savedPlaceIds: string[];
   onToggleSave: (placeId: string) => void;
@@ -26,6 +27,7 @@ interface MapViewProps {
 }
 
 export const MapView: React.FC<MapViewProps> = ({
+  places,
   onViewDetails,
   savedPlaceIds,
   onToggleSave,
@@ -33,6 +35,11 @@ export const MapView: React.FC<MapViewProps> = ({
 }) => {
   const { location } = useLocation();
   const { tripPlaces, tripRoute, isOptimized, optimizeTripRoute, distanceSavedKm } = useTrip();
+
+  const activePlaces = React.useMemo(() => {
+    return places && places.length > 0 ? places : DEMO_PLACES;
+  }, [places]);
+
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
@@ -41,15 +48,17 @@ export const MapView: React.FC<MapViewProps> = ({
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(() => {
     if (initialSelectedPlaceId) {
-      return DEMO_PLACES.find((p) => p.id === initialSelectedPlaceId) || null;
+      return activePlaces.find((p) => p.id === initialSelectedPlaceId) || null;
     }
     return null;
   });
 
   // Filter places based on selectedCategory
-  const displayedPlaces = DEMO_PLACES.filter(
-    (p) => selectedCategory === 'all' || p.category === selectedCategory
-  );
+  const displayedPlaces = React.useMemo(() => {
+    return activePlaces.filter(
+      (p) => selectedCategory === 'all' || p.category === selectedCategory
+    );
+  }, [activePlaces, selectedCategory]);
 
   // Initialize Leaflet Map once
   useEffect(() => {
@@ -348,16 +357,36 @@ export const MapView: React.FC<MapViewProps> = ({
                     className="w-14 h-14 rounded-xl object-cover shrink-0 shadow-2xs"
                   />
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-sky-600 block">
-                      {selectedPlace.categoryLabel}
-                    </span>
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-sky-600 block">
+                        {selectedPlace.categoryLabel}
+                      </span>
+                      {selectedPlace.source === 'live' ? (
+                        <span className="px-1.5 py-0.2 text-[9px] font-extrabold rounded-md bg-emerald-100 text-emerald-800">
+                          Live POI
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.2 text-[9px] font-bold rounded-md bg-amber-100 text-amber-800">
+                          Demo Hub
+                        </span>
+                      )}
+                    </div>
                     <h3 className="font-extrabold text-slate-900 text-sm sm:text-base leading-tight">
                       {selectedPlace.name}
                     </h3>
                     <div className="flex items-center space-x-1.5 text-xs text-slate-500 mt-0.5">
-                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
-                      <span className="font-bold text-slate-800">{selectedPlace.rating.toFixed(1)}</span>
-                      <span>•</span>
+                      {selectedPlace.rating !== undefined && selectedPlace.rating !== null ? (
+                        <>
+                          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
+                          <span className="font-bold text-slate-800">{selectedPlace.rating.toFixed(1)}</span>
+                          <span>•</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="font-medium text-slate-400">Unrated</span>
+                          <span>•</span>
+                        </>
+                      )}
                       <span>{selectedPlace.distanceKm} km away</span>
                     </div>
                   </div>

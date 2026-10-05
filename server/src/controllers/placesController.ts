@@ -5,23 +5,29 @@ export interface BackendPlace {
   name: string;
   category: string;
   categoryLabel: string;
-  rating: number;
-  reviewCount: number;
+  rating?: number;
+  reviewCount?: number;
   lat: number;
   lon: number;
+  distanceKm?: number;
+  travelTimeMin?: number;
+  isOpenNow?: boolean;
   visitDuration: string;
   imageUrl: string;
   shortDescription: string;
-  fullDescription: string;
+  fullDescription?: string;
   whyRecommended: string;
   tags: string[];
-  openingHours: string;
-  openHour: number;  // 24h format (e.g., 9 for 9 AM)
-  closeHour: number; // 24h format (e.g., 17.5 for 5:30 PM)
+  openingHours?: string;
+  openHour?: number;  // 24h format (e.g., 9 for 9 AM)
+  closeHour?: number; // 24h format (e.g., 17.5 for 5:30 PM)
   closedDays?: number[]; // 0 = Sunday, 5 = Friday, etc.
-  entryFee: string;
-  nearbyFood: string[];
-  transportEstimates: { mode: string; label: string; time: string; cost: string; icon: string }[];
+  entryFee?: string;
+  nearbyFood?: string[];
+  transportEstimates?: { mode: string; label: string; time: string; cost: string; icon: string }[];
+  source?: 'live' | 'demo';
+  sourceName?: string;
+  address?: string;
 }
 
 // Master places database (centered in Hyderabad hub)
@@ -296,7 +302,11 @@ export function calculateHaversineDistanceKm(lat1: number, lon1: number, lat2: n
 /**
  * Determine if a place is open based on current local hour and day
  */
-export function checkIsOpenNow(place: BackendPlace): boolean {
+export function checkIsOpenNow(place: BackendPlace): boolean | undefined {
+  if (place.openHour === undefined || place.closeHour === undefined) {
+    return undefined; // Operating hours not listed
+  }
+
   const now = new Date();
   const currentDay = now.getDay(); // 0 is Sunday, 5 is Friday
   const currentHour = now.getHours() + now.getMinutes() / 60;
@@ -361,7 +371,7 @@ export const getPlaces = async (req: Request, res: Response) => {
   if (minRating) {
     const ratingThreshold = parseFloat(minRating as string);
     if (!isNaN(ratingThreshold)) {
-      results = results.filter((p) => p.rating >= ratingThreshold);
+      results = results.filter((p) => p.rating !== undefined && p.rating >= ratingThreshold);
     }
   }
 
@@ -382,7 +392,7 @@ export const getPlaces = async (req: Request, res: Response) => {
   if (sortBy === 'distance') {
     results.sort((a, b) => a.distanceKm - b.distanceKm);
   } else if (sortBy === 'rating') {
-    results.sort((a, b) => b.rating - a.rating);
+    results.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
   }
 
   return res.status(200).json({
@@ -420,4 +430,534 @@ export const getPlaceById = async (req: Request, res: Response) => {
       isOpenNow: isOpen
     }
   });
+};
+
+/**
+ * Category High-Resolution Curated Photography
+ * Used when OpenStreetMap POIs do not include direct Wikimedia/image tags.
+ */
+const CATEGORY_IMAGE_MAP: Record<string, string> = {
+  temples: 'https://images.unsplash.com/photo-1620766182966-c6eb5ed2b788?auto=format&fit=crop&w=800&q=80',
+  history: 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?auto=format&fit=crop&w=800&q=80',
+  nature: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=800&q=80',
+  food: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=800&q=80',
+  architecture: 'https://images.unsplash.com/photo-1567157577867-05ccb1388e66?auto=format&fit=crop&w=800&q=80',
+  cafes: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80',
+  shopping: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80',
+  photography: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80',
+  culture: 'https://images.unsplash.com/photo-1608889175123-8ee362201f81?auto=format&fit=crop&w=800&q=80',
+};
+
+/**
+ * Classifies an OpenStreetMap element by its tags into one of our 9 standard categories.
+ */
+function classifyOsmPoi(tags: Record<string, string>): { category: string; categoryLabel: string } {
+  const name = (tags.name || tags['name:en'] || '').toLowerCase();
+  const amenity = (tags.amenity || '').toLowerCase();
+  const tourism = (tags.tourism || '').toLowerCase();
+  const historic = (tags.historic || '').toLowerCase();
+  const leisure = (tags.leisure || '').toLowerCase();
+  const shop = (tags.shop || '').toLowerCase();
+  const religion = (tags.religion || '').toLowerCase();
+  const building = (tags.building || '').toLowerCase();
+  const natural = (tags.natural || '').toLowerCase();
+
+  // 1. Temples & Shrines
+  if (
+    religion === 'hindu' ||
+    religion === 'buddhist' ||
+    religion === 'jain' ||
+    religion === 'sikh' ||
+    religion === 'muslim' ||
+    religion === 'christian' ||
+    amenity === 'place_of_worship' ||
+    building === 'temple' ||
+    building === 'mosque' ||
+    building === 'church' ||
+    name.includes('temple') ||
+    name.includes('mandir') ||
+    name.includes('shrine') ||
+    name.includes('ashram') ||
+    name.includes('dargah') ||
+    name.includes('masjid') ||
+    name.includes('church') ||
+    name.includes('gurudwara')
+  ) {
+    return { category: 'temples', categoryLabel: '🛕 Temple / Shrine' };
+  }
+
+  // 2. Cafes & Tea
+  if (
+    amenity === 'cafe' ||
+    shop === 'tea' ||
+    shop === 'coffee' ||
+    name.includes('cafe') ||
+    name.includes('coffee') ||
+    name.includes('chai') ||
+    name.includes('tea')
+  ) {
+    return { category: 'cafes', categoryLabel: '☕ Cafe & Tea Spot' };
+  }
+
+  // 3. Local Food
+  if (
+    amenity === 'restaurant' ||
+    amenity === 'fast_food' ||
+    amenity === 'food_court' ||
+    tags.cuisine ||
+    name.includes('hotel') ||
+    name.includes('biryani') ||
+    name.includes('bhojanalay') ||
+    name.includes('tiffin') ||
+    name.includes('restaurant') ||
+    name.includes('dhaba') ||
+    name.includes('kitchen')
+  ) {
+    return { category: 'food', categoryLabel: '🍴 Local Food' };
+  }
+
+  // 4. Photography & Viewpoints
+  if (
+    tourism === 'viewpoint' ||
+    name.includes('viewpoint') ||
+    name.includes('view point') ||
+    name.includes('sunset point') ||
+    name.includes('sunrise point')
+  ) {
+    return { category: 'photography', categoryLabel: '📸 Scenic Viewpoint' };
+  }
+
+  // 5. Nature & Parks
+  if (
+    leisure === 'park' ||
+    leisure === 'garden' ||
+    leisure === 'nature_reserve' ||
+    natural === 'water' ||
+    natural === 'peak' ||
+    natural === 'beach' ||
+    natural === 'wood' ||
+    tourism === 'zoo' ||
+    name.includes('park') ||
+    name.includes('garden') ||
+    name.includes('lake') ||
+    name.includes('cheruvu') ||
+    name.includes('falls') ||
+    name.includes('waterfall')
+  ) {
+    return { category: 'nature', categoryLabel: '🌿 Nature & Waterfront' };
+  }
+
+  // 6. Architecture & Palaces
+  if (
+    historic === 'palace' ||
+    historic === 'castle' ||
+    historic === 'manor' ||
+    building === 'palace' ||
+    name.includes('palace') ||
+    name.includes('mahal') ||
+    name.includes('haveli')
+  ) {
+    return { category: 'architecture', categoryLabel: '🏰 Architecture & Palace' };
+  }
+
+  // 7. Culture & Arts
+  if (
+    tourism === 'museum' ||
+    tourism === 'gallery' ||
+    tourism === 'theme_park' ||
+    amenity === 'theatre' ||
+    amenity === 'arts_centre' ||
+    name.includes('museum') ||
+    name.includes('gallery') ||
+    name.includes('theatre') ||
+    name.includes('bhavan') ||
+    name.includes('auditorium')
+  ) {
+    return { category: 'culture', categoryLabel: '🎭 Culture & Arts' };
+  }
+
+  // 8. Shopping & Bazaars
+  if (
+    shop === 'mall' ||
+    shop === 'bazaar' ||
+    shop === 'marketplace' ||
+    amenity === 'marketplace' ||
+    shop === 'department_store' ||
+    shop === 'clothes' ||
+    name.includes('bazaar') ||
+    name.includes('market') ||
+    name.includes('mall')
+  ) {
+    return { category: 'shopping', categoryLabel: '🛍️ Local Bazaar & Shopping' };
+  }
+
+  // 9. History / Heritage / Monuments
+  if (
+    historic !== '' ||
+    tourism === 'attraction' ||
+    name.includes('fort') ||
+    name.includes('tomb') ||
+    name.includes('gate') ||
+    name.includes('kaman') ||
+    name.includes('monument')
+  ) {
+    return { category: 'history', categoryLabel: '🏛️ Historical Landmark' };
+  }
+
+  return { category: 'culture', categoryLabel: '🎭 Local Attraction' };
+}
+
+interface CachedPoiResult {
+  timestamp: number;
+  data: {
+    success: boolean;
+    isLive: boolean;
+    source: string;
+    sourceName: string;
+    origin: { lat: number; lon: number };
+    total: number;
+    places: BackendPlace[];
+  };
+}
+
+const nearbyPoiCache = new Map<string, CachedPoiResult>();
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+/**
+ * GET /api/places/nearby
+ * Real OpenStreetMap Overpass POI Discovery
+ */
+function classifyNominatimPoi(type: string, category: string, name: string): { category: string; categoryLabel: string } {
+  const t = (type || '').toLowerCase();
+  const c = (category || '').toLowerCase();
+  const n = (name || '').toLowerCase();
+
+  // 1. Temples & Sacred Shrines
+  if (
+    t === 'place_of_worship' ||
+    c === 'place_of_worship' ||
+    n.includes('temple') ||
+    n.includes('mandir') ||
+    n.includes('masjid') ||
+    n.includes('mosque') ||
+    n.includes('dargah') ||
+    n.includes('gurdwara') ||
+    n.includes('church') ||
+    n.includes('shrine')
+  ) {
+    return { category: 'temples', categoryLabel: '🛕 Sacred Temple & Shrine' };
+  }
+
+  // 2. Cafes & Tea
+  if (t === 'cafe' || n.includes('cafe') || n.includes('coffee') || n.includes('tea') || n.includes('chai')) {
+    return { category: 'cafes', categoryLabel: '☕ Heritage Cafe & Chai' };
+  }
+
+  // 3. Local Food
+  if (t === 'restaurant' || t === 'fast_food' || n.includes('restaurant') || n.includes('bhojanalaya') || n.includes('biryani') || n.includes('hotel') || n.includes('dhaba') || n.includes('food')) {
+    return { category: 'food', categoryLabel: '🍲 Local Food & Dining' };
+  }
+
+  // 4. Photography & Viewpoints
+  if (t === 'viewpoint' || n.includes('viewpoint') || n.includes('view point') || n.includes('sunset') || n.includes('sunrise')) {
+    return { category: 'photography', categoryLabel: '📸 Scenic Viewpoint' };
+  }
+
+  // 5. Nature & Parks
+  if (t === 'park' || t === 'garden' || c === 'leisure' || n.includes('park') || n.includes('garden') || n.includes('lake') || n.includes('cheruvu') || n.includes('falls') || n.includes('waterfall') || n.includes('zoo')) {
+    return { category: 'nature', categoryLabel: '🌿 Nature & Waterfront' };
+  }
+
+  // 6. Architecture & Palaces
+  if (t === 'palace' || t === 'castle' || n.includes('palace') || n.includes('mahal') || n.includes('haveli')) {
+    return { category: 'architecture', categoryLabel: '🏰 Architecture & Palace' };
+  }
+
+  // 7. Culture & Arts
+  if (t === 'museum' || t === 'gallery' || t === 'theatre' || t === 'arts_centre' || n.includes('museum') || n.includes('gallery') || n.includes('theatre') || n.includes('bhavan') || n.includes('memorial')) {
+    return { category: 'culture', categoryLabel: '🎭 Culture & Heritage' };
+  }
+
+  // 8. Shopping & Bazaars
+  if (t === 'marketplace' || t === 'bazaar' || t === 'mall' || n.includes('bazaar') || n.includes('market') || n.includes('mall') || n.includes('shopping')) {
+    return { category: 'shopping', categoryLabel: '🛍️ Local Bazaar & Shopping' };
+  }
+
+  // 9. History
+  return { category: 'history', categoryLabel: '🏛️ Historical Landmark' };
+}
+
+/**
+ * GET /api/places/nearby
+ * Real OpenStreetMap POI Discovery (Nominatim + Overpass)
+ */
+export const getNearbyPlaces = async (req: Request, res: Response) => {
+  const { lat, lon, radius, category } = req.query;
+
+  if (!lat || !lon) {
+    return res.status(400).json({ error: 'Latitude and longitude are required' });
+  }
+
+  const userLat = parseFloat(lat as string);
+  const userLon = parseFloat(lon as string);
+
+  if (isNaN(userLat) || isNaN(userLon)) {
+    return res.status(400).json({ error: 'Invalid numeric coordinates' });
+  }
+
+  const searchRadius = Math.min(25000, Math.max(1000, radius ? parseInt(radius as string, 10) : 6000));
+  const cacheKey = `${userLat.toFixed(3)}_${userLon.toFixed(3)}_${searchRadius}_${category || 'all'}`;
+
+  // Check cache
+  const cached = nearbyPoiCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return res.status(200).json(cached.data);
+  }
+
+  const livePlaces: BackendPlace[] = [];
+  const seenNames = new Set<string>();
+
+  // TIER 1: OpenStreetMap Nominatim POI Discovery (sub-second latency, bounded by user radius)
+  try {
+    const delta = Math.min(0.18, (searchRadius / 1000) * 0.012);
+    const viewbox = `${userLon - delta},${userLat + delta},${userLon + delta},${userLat - delta}`;
+
+    let searchTerm = 'attraction';
+    if (category === 'temples') searchTerm = 'temple';
+    else if (category === 'history') searchTerm = 'monument';
+    else if (category === 'nature') searchTerm = 'park';
+    else if (category === 'food') searchTerm = 'restaurant';
+    else if (category === 'cafes') searchTerm = 'cafe';
+    else if (category === 'shopping') searchTerm = 'market';
+    else if (category === 'culture') searchTerm = 'museum';
+    else if (category === 'architecture') searchTerm = 'palace';
+    else if (category === 'photography') searchTerm = 'viewpoint';
+
+    const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(searchTerm)}&bounded=1&viewbox=${viewbox}&limit=25`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+    const nomRes = await fetch(nominatimUrl, {
+      headers: {
+        'User-Agent': 'SmartTravelCompanion/1.0 (academic-project)',
+        'Accept-Language': 'en'
+      },
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (nomRes.ok) {
+      const nomItems = (await nomRes.json()) as any[];
+      if (Array.isArray(nomItems) && nomItems.length > 0) {
+        for (const p of nomItems) {
+          const rawName = p.name || p.display_name.split(',')[0];
+          if (!rawName || rawName.trim().length < 2) continue;
+          let name = rawName.trim();
+          const pLat = parseFloat(p.lat);
+          const pLon = parseFloat(p.lon);
+          if (isNaN(pLat) || isNaN(pLon)) continue;
+
+          const addressParts = p.display_name.split(',');
+          const address = addressParts.slice(1, 3).map((s: string) => s.trim()).filter(Boolean).join(', ') || undefined;
+
+          // If the name is generic like "Temple" or "Park", qualify it with neighborhood
+          if (name.length <= 8 && addressParts[1]) {
+            name = `${name} (${addressParts[1].trim()})`;
+          }
+
+          const normKey = `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}_${pLat.toFixed(3)}_${pLon.toFixed(3)}`;
+          if (seenNames.has(normKey)) continue;
+          seenNames.add(normKey);
+
+          const classification = classifyNominatimPoi(p.type, p.category, name);
+          if (category && category !== 'all' && classification.category !== category) {
+            continue;
+          }
+
+          const distanceKm = calculateHaversineDistanceKm(userLat, userLon, pLat, pLon);
+          const travelTimeMin = Math.max(3, Math.round(distanceKm * 2.5 + 3));
+
+          const imageUrl = CATEGORY_IMAGE_MAP[classification.category] || CATEGORY_IMAGE_MAP.culture;
+
+          livePlaces.push({
+            id: `osm-${p.place_id || p.osm_id}`,
+            name,
+            category: classification.category,
+            categoryLabel: classification.categoryLabel,
+            lat: pLat,
+            lon: pLon,
+            distanceKm: distanceKm as any,
+            travelTimeMin: travelTimeMin as any,
+            visitDuration: classification.category === 'history' || classification.category === 'architecture' ? '1–2 hrs' : '45–60 min',
+            imageUrl,
+            shortDescription: `Authentic ${classification.categoryLabel.replace(/^[^\w\s]+/, '').trim()}${address ? ` in ${address}` : ''}, discovered via OpenStreetMap live coordinates.`,
+            fullDescription: p.display_name,
+            whyRecommended: `Real-time discovery: ${distanceKm} km from your current GPS position.`,
+            tags: [classification.categoryLabel.replace(/^[^\w\s]+/, '').trim(), 'Live POI', ...(address ? [address] : [])],
+            source: 'live',
+            sourceName: 'OpenStreetMap Live POI',
+            address,
+            // Strictly real values: undefined for unknown (never invent fake ratings or hours)
+            rating: undefined,
+            reviewCount: undefined,
+            openingHours: undefined,
+            isOpenNow: undefined,
+            entryFee: undefined
+          });
+        }
+      }
+    }
+  } catch (nomErr: any) {
+    console.warn('[Nearby API] Nominatim POI search skipped or timed out:', nomErr?.message);
+  }
+
+  // TIER 2: If Nominatim found >= 3 places, return them sorted by proximity!
+  if (livePlaces.length >= 3) {
+    livePlaces.sort((a, b) => ((a as any).distanceKm || 0) - ((b as any).distanceKm || 0));
+    const resultData = {
+      success: true,
+      isLive: true,
+      source: 'osm-live',
+      sourceName: 'OpenStreetMap Live POI',
+      origin: { lat: userLat, lon: userLon },
+      total: livePlaces.length,
+      places: livePlaces
+    };
+    nearbyPoiCache.set(cacheKey, { timestamp: Date.now(), data: resultData });
+    return res.status(200).json(resultData);
+  }
+
+  // TIER 3: Overpass API fallback
+  try {
+    const query = `[out:json][timeout:6];
+(
+  node["tourism"~"attraction|museum|viewpoint"](around:${searchRadius},${userLat},${userLon});
+  node["historic"](around:${searchRadius},${userLat},${userLon});
+);
+out center body 25;`;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const response = await fetch('https://lz4.overpass-api.de/api/interpreter', {
+      method: 'POST',
+      body: 'data=' + encodeURIComponent(query),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'SmartTravelCompanion/1.0 (academic-project)'
+      },
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const data = await response.json() as any;
+      const elements: any[] = data.elements || [];
+
+      for (const el of elements) {
+        const tags = el.tags || {};
+        const rawName = tags.name || tags['name:en'] || tags['int_name'];
+        if (!rawName || rawName.trim().length < 2) continue;
+
+        const name = rawName.trim();
+        const normKey = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (seenNames.has(normKey)) continue;
+
+        const pLat = el.lat ?? el.center?.lat;
+        const pLon = el.lon ?? el.center?.lon;
+        if (!pLat || !pLon) continue;
+
+        seenNames.add(normKey);
+
+        const classification = classifyOsmPoi(tags);
+        if (category && category !== 'all' && classification.category !== category) {
+          continue;
+        }
+
+        const distanceKm = calculateHaversineDistanceKm(userLat, userLon, pLat, pLon);
+        const travelTimeMin = Math.max(3, Math.round(distanceKm * 2.5 + 3));
+        const rating = tags.stars ? parseFloat(tags.stars) : tags.rating ? parseFloat(tags.rating) : undefined;
+        const reviewCount = tags.review_count ? parseInt(tags.review_count, 10) : undefined;
+        const area = tags['addr:suburb'] || tags['addr:district'] || tags['addr:street'] || tags['addr:city'] || undefined;
+        const imageUrl = tags.image || tags.wikimedia_commons || CATEGORY_IMAGE_MAP[classification.category] || CATEGORY_IMAGE_MAP.culture;
+        const openingHours = tags.opening_hours || undefined;
+
+        livePlaces.push({
+          id: `osm-${el.id}`,
+          name,
+          category: classification.category,
+          categoryLabel: classification.categoryLabel,
+          lat: pLat,
+          lon: pLon,
+          distanceKm: distanceKm as any,
+          travelTimeMin: travelTimeMin as any,
+          visitDuration: '1–2 hrs',
+          imageUrl,
+          shortDescription: tags.description || `Authentic ${classification.categoryLabel.replace(/^[^\w\s]+/, '').trim()}${area ? ` in ${area}` : ''}, discovered via OpenStreetMap real-time geographic data.`,
+          fullDescription: tags.description ? `${tags.description} Discovered via live OpenStreetMap geographical data.` : undefined,
+          whyRecommended: `Real-time discovery: ${distanceKm} km from your current GPS position.`,
+          tags: [classification.categoryLabel.replace(/^[^\w\s]+/, '').trim(), 'Live POI', ...(area ? [area] : [])],
+          openingHours,
+          rating,
+          reviewCount,
+          entryFee: tags.fee === 'no' ? 'Free Entry' : tags.fee || undefined,
+          source: 'live',
+          sourceName: 'OpenStreetMap Live POI',
+          address: area,
+        });
+      }
+
+      livePlaces.sort((a, b) => ((a as any).distanceKm || 0) - ((b as any).distanceKm || 0));
+
+      if (livePlaces.length >= 3) {
+        const resultData = {
+          success: true,
+          isLive: true,
+          source: 'osm-live',
+          sourceName: 'OpenStreetMap Live POI',
+          origin: { lat: userLat, lon: userLon },
+          total: livePlaces.length,
+          places: livePlaces
+        };
+
+        nearbyPoiCache.set(cacheKey, { timestamp: Date.now(), data: resultData });
+        return res.status(200).json(resultData);
+      }
+    }
+  } catch (err: unknown) {
+    console.warn('Overpass API query failed or timed out. Falling back to curated seed places:', (err as Error)?.message);
+  }
+
+  // Graceful fallback: Curated Seed Dataset with re-calculated distances
+  let fallbackPlaces = PLACES_DATA.map((p) => {
+    const distanceKm = calculateHaversineDistanceKm(userLat, userLon, p.lat, p.lon);
+    const isOpen = checkIsOpenNow(p);
+    return {
+      ...p,
+      distanceKm,
+      travelTimeMin: Math.max(5, Math.round(distanceKm * 2.5 + 4)),
+      isOpenNow: isOpen,
+      source: 'demo' as const,
+      sourceName: 'Curated Seed Data (Demo Fallback)',
+    };
+  });
+
+  if (category && category !== 'all') {
+    fallbackPlaces = fallbackPlaces.filter((p) => p.category === category);
+  }
+
+  fallbackPlaces.sort((a, b) => a.distanceKm - b.distanceKm);
+
+  const fallbackData = {
+    success: true,
+    isLive: false,
+    source: 'demo-fallback',
+    sourceName: 'Curated Seed Data (Demo Fallback)',
+    origin: { lat: userLat, lon: userLon },
+    total: fallbackPlaces.length,
+    places: fallbackPlaces
+  };
+
+  return res.status(200).json(fallbackData);
 };

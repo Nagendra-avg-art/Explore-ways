@@ -93,11 +93,23 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
           {/* Subtle gradient overlay for text readability */}
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-black/30" />
 
-          {/* Top Bar with Category & Close Button */}
+          {/* Top Bar with Category, Address & Close Button */}
           <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
-            <span className="bg-white/95 backdrop-blur-md text-slate-800 text-xs font-semibold px-3 py-1.5 rounded-full shadow-md">
-              {place.categoryLabel}
-            </span>
+            <div className="flex items-center space-x-2">
+              <span className="bg-white/95 backdrop-blur-md text-slate-800 text-xs font-semibold px-3 py-1.5 rounded-full shadow-md">
+                {place.categoryLabel}
+              </span>
+              {place.source === 'live' ? (
+                <span className="bg-emerald-600/90 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md flex items-center space-x-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                  <span>Live POI</span>
+                </span>
+              ) : (
+                <span className="bg-amber-500/90 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md">
+                  Demo Hub
+                </span>
+              )}
+            </div>
 
             <button
               onClick={onClose}
@@ -110,19 +122,33 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
 
           {/* Title and Rating on Bottom of Image */}
           <div className="absolute bottom-4 left-4 right-4 text-white">
-            <div className="flex items-center space-x-2 text-xs font-bold text-amber-300 mb-1">
-              <Star className="w-4 h-4 fill-amber-300 text-amber-300" />
-              <span>{place.rating.toFixed(1)}</span>
-              <span className="text-white/80 font-normal">({(place.reviewCount / 1000).toFixed(1)}k reviews)</span>
+            <div className="flex items-center space-x-2 text-xs font-bold mb-1">
+              {place.rating !== undefined && place.rating !== null ? (
+                <div className="flex items-center space-x-1 text-amber-300">
+                  <Star className="w-4 h-4 fill-amber-300 text-amber-300" />
+                  <span>{place.rating.toFixed(1)}</span>
+                  {place.reviewCount ? (
+                    <span className="text-white/80 font-normal">({(place.reviewCount / 1000).toFixed(1)}k reviews)</span>
+                  ) : null}
+                </div>
+              ) : (
+                <span className="text-white/70 font-medium">Unrated (OpenStreetMap Live)</span>
+              )}
             </div>
             <h2 id="modal-place-title" className="text-2xl sm:text-3xl font-extrabold tracking-tight">
               {place.name}
             </h2>
-            <div className="flex items-center space-x-3 text-xs text-white/90 mt-1 font-medium">
+            <div className="flex flex-wrap items-center gap-3 text-xs text-white/90 mt-1 font-medium">
               <span className="flex items-center space-x-1">
                 <MapPin className="w-3.5 h-3.5 text-sky-400" />
                 <span>{place.distanceKm} km away</span>
               </span>
+              {place.address && (
+                <>
+                  <span>•</span>
+                  <span>📍 {place.address}</span>
+                </>
+              )}
               <span>•</span>
               <span className="flex items-center space-x-1">
                 <Clock className="w-3.5 h-3.5 text-sky-400" />
@@ -249,7 +275,7 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
                 <span>Opening Hours</span>
               </div>
               <span className="text-xs font-bold text-slate-800">
-                {place.openingHours || 'Regular Daytime Hours'}
+                {place.openingHours || (place.source === 'live' ? 'Hours not listed on OpenStreetMap' : 'Regular Daytime Hours')}
               </span>
             </div>
 

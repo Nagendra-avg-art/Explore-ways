@@ -9,6 +9,7 @@ import { PreferencesModal } from './components/PreferencesModal';
 import { ExploreView } from './components/ExploreView';
 import { MapView } from './components/MapView';
 import { LocationProvider, useLocation } from './context/LocationContext';
+import { PlacesProvider, usePlaces } from './context/PlacesContext';
 import { PreferencesProvider, usePreferences } from './context/PreferencesContext';
 import { TripProvider, useTrip } from './context/TripContext';
 import { TripRouteView } from './components/TripRouteView';
@@ -26,7 +27,9 @@ import {
   Bot,
   Loader2,
   AlertCircle,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Radio,
+  RefreshCw
 } from 'lucide-react';
 
 interface BackendHealth {
@@ -62,6 +65,21 @@ function MainAppContent() {
     tripRoute 
   } = useTrip();
 
+  // Real Location & Nearby Place Discovery Context
+  const {
+    places: discoveredPlaces,
+    isLiveDiscovery,
+    isLoading: isLoadingNearby,
+    sourceName,
+    totalFound,
+    discoverNearbyPlaces,
+    useDemoFallback,
+    knownPlacesMap
+  } = usePlaces();
+
+  // Active candidate places (Live OSM or Demo Fallback)
+  const availablePlaces = discoveredPlaces.length > 0 ? discoveredPlaces : DEMO_PLACES;
+
   // Discovery state
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -91,7 +109,7 @@ function MainAppContent() {
   // Filtered and Ranked Places for Home feed
   const filteredPlaces = useMemo(() => {
     // Score all places using multi-factor recommendation engine
-    let places = DEMO_PLACES.map((place) => {
+    let places = availablePlaces.map((place) => {
       const scored = scorePlace(place, location.lat, location.lon, preferences);
       return {
         ...place,
@@ -117,7 +135,7 @@ function MainAppContent() {
       places = places.filter((p) => p.distanceKm <= preferences.maxDistanceKm!);
     }
     if (preferences.minRating && preferences.minRating > 0) {
-      places = places.filter((p) => p.rating >= preferences.minRating!);
+      places = places.filter((p) => p.rating !== undefined && p.rating !== null && p.rating >= preferences.minRating!);
     }
     if (preferences.openNowOnly) {
       places = places.filter((p) => p.isOpenNow === true);
@@ -126,11 +144,11 @@ function MainAppContent() {
     // Sort descending by matchScore
     places.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
     return places;
-  }, [selectedCategory, searchQuery, location, preferences]);
+  }, [availablePlaces, selectedCategory, searchQuery, location, preferences]);
 
 
   const toggleSavePlace = (placeId: string) => {
-    const place = DEMO_PLACES.find((p) => p.id === placeId);
+    const place = knownPlacesMap[placeId] || availablePlaces.find((p) => p.id === placeId) || DEMO_PLACES.find((p) => p.id === placeId);
     if (place) {
       toggleTripPlace(place);
     }
@@ -340,6 +358,69 @@ function MainAppContent() {
             />
           </section>
 
+          {/* LIVE DISCOVERY vs DEMO FALLBACK BANNER */}
+          <section className="animate-fadeIn">
+            <div 
+              className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-2xl border text-xs shadow-2xs transition-all ${
+                isLiveDiscovery 
+                  ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950' 
+                  : 'bg-amber-50/80 border-amber-200 text-amber-950'
+              }`}
+            >
+              <div className="flex items-center space-x-2.5">
+                <span className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full font-bold uppercase tracking-wider text-[10px] ${
+                  isLiveDiscovery ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'
+                }`}>
+                  <Radio className="w-3 h-3 animate-pulse" />
+                  <span>{isLiveDiscovery ? 'LIVE POI DISCOVERY' : 'CURATED DEMO HUB'}</span>
+                </span>
+                <span className="font-medium">
+                  {isLiveDiscovery 
+                    ? `Discovered ${totalFound} real attractions around ${location.city} via ${sourceName}.`
+                    : `Showing curated demonstration highlights for ${location.city}. Allow GPS to discover real nearby places around your current position.`
+                  }
+                </span>
+              </div>
+
+              <div className="flex items-center space-x-2 self-end sm:self-auto shrink-0">
+                {isLoadingNearby ? (
+                  <div className="flex items-center space-x-1.5 text-slate-500 font-semibold text-[11px] px-2 py-1">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-600" />
+                    <span>Querying OpenStreetMap...</span>
+                  </div>
+                ) : isLiveDiscovery ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => discoverNearbyPlaces(location.lat, location.lon)}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-[11px] flex items-center space-x-1 transition-all cursor-pointer"
+                      title="Re-query nearby POIs"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      <span>Refresh</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={useDemoFallback}
+                      className="px-2.5 py-1 rounded-lg bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-800 font-semibold text-[11px] transition-all cursor-pointer"
+                    >
+                      Switch to Demo
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleExploreNearMe}
+                    className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] flex items-center space-x-1 transition-all cursor-pointer shadow-2xs"
+                  >
+                    <MapPin className="w-3 h-3" />
+                    <span>Use Real GPS</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </section>
+
           {/* RECOMMENDED PLACES FEED */}
           <section className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 px-1">
@@ -416,6 +497,7 @@ function MainAppContent() {
       {/* TAB 3: MAP VIEW (INTERACTIVE MAP) */}
       {activeTab === 'map' && (
         <MapView
+          places={availablePlaces}
           onViewDetails={(p) => setSelectedPlaceForModal(p)}
           savedPlaceIds={savedPlaceIds}
           onToggleSave={toggleSavePlace}
@@ -507,11 +589,13 @@ function MainAppContent() {
 export default function App() {
   return (
     <LocationProvider>
-      <PreferencesProvider>
-        <TripProvider>
-          <MainAppContent />
-        </TripProvider>
-      </PreferencesProvider>
+      <PlacesProvider>
+        <PreferencesProvider>
+          <TripProvider>
+            <MainAppContent />
+          </TripProvider>
+        </PreferencesProvider>
+      </PlacesProvider>
     </LocationProvider>
   );
 }

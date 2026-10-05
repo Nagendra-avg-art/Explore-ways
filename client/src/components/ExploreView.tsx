@@ -9,12 +9,12 @@ import {
   Clock,
   Sparkles
 } from 'lucide-react';
-import { DEMO_PLACES } from '../data/demoPlaces';
 import { CategoryPills } from './CategoryPills';
 import { PlaceCard } from './PlaceCard';
 import { CategoryId, Place, SortOption } from '../types/travel';
 import { useLocation } from '../context/LocationContext';
 import { usePreferences } from '../context/PreferencesContext';
+import { usePlaces } from '../context/PlacesContext';
 import { scorePlace } from '../services/recommendationEngine';
 
 interface ExploreViewProps {
@@ -34,6 +34,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
 }) => {
   const { location } = useLocation();
   const { preferences, updatePreferences, setIsPreferencesModalOpen } = usePreferences();
+  const { places: availablePlaces, isLiveDiscovery, sourceName } = usePlaces();
 
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -62,7 +63,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
   // Filter and Sort places dynamically with AI Recommendation Scoring
   const processedPlaces = useMemo(() => {
     // 1. Score, filter and rank all candidate places using multi-factor engine
-    let result = DEMO_PLACES.map((place) => {
+    let result = availablePlaces.map((place) => {
       const scored = scorePlace(place, location.lat, location.lon, preferences);
       return {
         ...place,
@@ -100,7 +101,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
     // 5. Filter: Minimum Rating
     if (ratingFilter !== 'all') {
       const minStars = parseFloat(ratingFilter);
-      result = result.filter((p) => p.rating >= minStars);
+      result = result.filter((p) => p.rating !== undefined && p.rating >= minStars);
     }
 
     // 6. Filter: Open Now Status
@@ -114,7 +115,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
     } else if (sortBy === 'distance') {
       result = [...result].sort((a, b) => a.distanceKm - b.distanceKm);
     } else if (sortBy === 'rating') {
-      result = [...result].sort((a, b) => b.rating - a.rating);
+      result = [...result].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
     }
 
     return result;
@@ -342,10 +343,17 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
       />
 
       {/* Results Header */}
-      <div className="flex items-center justify-between px-1">
-        <span className="text-xs text-slate-500 font-medium">
-          Showing <strong>{processedPlaces.length}</strong> of {DEMO_PLACES.length} places
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <div className="flex items-center space-x-2">
+          <span className="text-xs text-slate-500 font-medium">
+            Showing <strong>{processedPlaces.length}</strong> of {availablePlaces.length} places
+          </span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+            isLiveDiscovery ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+          }`}>
+            {isLiveDiscovery ? `🟢 Live (${sourceName})` : '🔶 Curated Demo'}
+          </span>
+        </div>
         {sortBy !== 'recommended' && (
           <span className="text-xs text-sky-700 font-semibold bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-100">
             Sorted by {sortBy === 'distance' ? 'Distance (Nearest First)' : 'Rating (Highest First)'}

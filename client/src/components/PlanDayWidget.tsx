@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Clock, IndianRupee, Sparkles, Check, ArrowRight, SlidersHorizontal } from 'lucide-react';
 import { usePreferences } from '../context/PreferencesContext';
 import { useLocation } from '../context/LocationContext';
+import { usePlaces } from '../context/PlacesContext';
 import { TimeOption, BudgetOption, CategoryId } from '../types/travel';
 import { TRAVEL_CATEGORIES, DEMO_PLACES } from '../data/demoPlaces';
 import { rankPlacesForUser } from '../services/recommendationEngine';
@@ -17,11 +18,14 @@ interface PlanDayWidgetProps {
 export const PlanDayWidget: React.FC<PlanDayWidgetProps> = ({ onBuildPlan }) => {
   const { preferences, updatePreferences, setIsPreferencesModalOpen } = usePreferences();
   const { location } = useLocation();
+  const { places } = usePlaces();
   const [planGenerated, setPlanGenerated] = useState<boolean>(false);
 
+  const availablePlaces = places && places.length > 0 ? places : DEMO_PLACES;
+
   const topDayPlaces = useMemo(() => {
-    return rankPlacesForUser(DEMO_PLACES, location.lat, location.lon, preferences).slice(0, 3);
-  }, [location, preferences]);
+    return rankPlacesForUser(availablePlaces, location.lat, location.lon, preferences).slice(0, 3);
+  }, [availablePlaces, location, preferences]);
 
   // Map hours to TimeOption
   const getTimeOptionFromHours = (hrs: number): TimeOption => {
