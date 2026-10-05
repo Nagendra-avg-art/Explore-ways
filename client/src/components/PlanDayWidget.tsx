@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Clock, IndianRupee, Sparkles, Check, ArrowRight } from 'lucide-react';
-import { TimeOption, BudgetOption } from '../types/travel';
+import { Clock, IndianRupee, Sparkles, Check, ArrowRight, SlidersHorizontal } from 'lucide-react';
+import { usePreferences } from '../context/PreferencesContext';
+import { TimeOption, BudgetOption, CategoryId } from '../types/travel';
+import { TRAVEL_CATEGORIES } from '../data/demoPlaces';
 
 interface PlanDayWidgetProps {
   onBuildPlan?: (planConfig: {
@@ -11,43 +13,55 @@ interface PlanDayWidgetProps {
 }
 
 export const PlanDayWidget: React.FC<PlanDayWidgetProps> = ({ onBuildPlan }) => {
-  const [selectedTime, setSelectedTime] = useState<TimeOption>('4h');
-  const [selectedBudget, setSelectedBudget] = useState<BudgetOption>('1000');
-  const [selectedInterests, setSelectedInterests] = useState<string[]>([
-    'History',
-    'Food',
-  ]);
+  const { preferences, updatePreferences, setIsPreferencesModalOpen } = usePreferences();
   const [planGenerated, setPlanGenerated] = useState<boolean>(false);
 
-  const timeOptions: { id: TimeOption; label: string; desc: string }[] = [
-    { id: '2h', label: '2 Hours', desc: 'Quick Highlights' },
-    { id: '4h', label: '4 Hours', desc: 'Half-Day Discovery' },
-    { id: 'halfDay', label: '6–8 Hours', desc: 'Standard Day Trip' },
-    { id: 'fullDay', label: 'Full Day', desc: 'Complete Immersion' },
+  // Map hours to TimeOption
+  const getTimeOptionFromHours = (hrs: number): TimeOption => {
+    if (hrs <= 2) return '2h';
+    if (hrs <= 4) return '4h';
+    if (hrs <= 7) return 'halfDay';
+    return 'fullDay';
+  };
+
+  // Map Budget to BudgetOption
+  const getBudgetOptionFromAmount = (amt: number): BudgetOption => {
+    if (amt <= 500) return '500';
+    if (amt <= 1500) return '1000';
+    if (amt <= 3500) return '2000';
+    return '5000';
+  };
+
+  const selectedTime = getTimeOptionFromHours(preferences.availableHours);
+  const selectedBudget = getBudgetOptionFromAmount(preferences.budgetAmount);
+
+  const timeOptions: { id: TimeOption; hours: number; label: string; desc: string }[] = [
+    { id: '2h', hours: 2, label: '2 Hours', desc: 'Quick Highlights' },
+    { id: '4h', hours: 4, label: '4 Hours', desc: 'Half-Day Discovery' },
+    { id: 'halfDay', hours: 6, label: '6–8 Hours', desc: 'Standard Day Trip' },
+    { id: 'fullDay', hours: 9, label: 'Full Day', desc: 'Complete Immersion' },
   ];
 
-  const budgetOptions: { id: BudgetOption; label: string; tag: string }[] = [
-    { id: '500', label: '₹500', tag: 'Budget Friendly' },
-    { id: '1000', label: '₹1,000', tag: 'Most Popular' },
-    { id: '2000', label: '₹2,000', tag: 'Comfortable' },
-    { id: '5000', label: '₹5,000+', tag: 'Premium / Cab' },
+  const budgetOptions: { id: BudgetOption; amount: number; label: string; tag: string }[] = [
+    { id: '500', amount: 500, label: '₹500', tag: 'Budget Friendly' },
+    { id: '1000', amount: 1000, label: '₹1,000', tag: 'Most Popular' },
+    { id: '2000', amount: 2000, label: '₹2,000', tag: 'Comfortable' },
+    { id: '5000', amount: 5000, label: '₹5,000+', tag: 'Premium / Cab' },
   ];
 
-  const interestOptions = [
-    { id: 'History', label: '🏛️ History' },
-    { id: 'Food', label: '🍴 Local Food' },
-    { id: 'Temples', label: '🛕 Temples' },
-    { id: 'Nature', label: '🌊 Nature' },
-    { id: 'Architecture', label: '🏗️ Architecture' },
-    { id: 'Shopping', label: '🛍️ Shopping' },
-  ];
+  const availableCategories = TRAVEL_CATEGORIES.filter((c) => c.id !== 'all').slice(0, 6);
 
-  const toggleInterest = (interest: string) => {
-    setSelectedInterests((prev) =>
-      prev.includes(interest)
-        ? prev.filter((i) => i !== interest)
-        : [...prev, interest]
-    );
+  const toggleInterest = (catId: CategoryId) => {
+    const exists = preferences.interests.includes(catId);
+    let newInterests: CategoryId[];
+    if (exists) {
+      if (preferences.interests.length <= 1) return;
+      newInterests = preferences.interests.filter((id) => id !== catId);
+    } else {
+      newInterests = [...preferences.interests, catId];
+    }
+    updatePreferences({ interests: newInterests });
+    setPlanGenerated(false);
   };
 
   const handleBuildPlan = () => {
@@ -55,8 +69,17 @@ export const PlanDayWidget: React.FC<PlanDayWidgetProps> = ({ onBuildPlan }) => 
     onBuildPlan?.({
       time: selectedTime,
       budget: selectedBudget,
-      interests: selectedInterests,
+      interests: preferences.interests,
     });
+  };
+
+  const getStyleEmoji = () => {
+    switch (preferences.travelStyle) {
+      case 'solo': return '🎒 Solo';
+      case 'couple': return '💑 Couple';
+      case 'family': return '👨‍👩‍👧 Family';
+      case 'friends': return '👥 Friends';
+    }
   };
 
   return (
@@ -67,24 +90,37 @@ export const PlanDayWidget: React.FC<PlanDayWidgetProps> = ({ onBuildPlan }) => 
       <div className="relative z-10 max-w-4xl mx-auto space-y-8">
         
         {/* Section Header */}
-        <div className="text-center sm:text-left space-y-1.5">
-          <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-teal-100/80 text-teal-800 text-xs font-semibold">
-            <Clock className="w-3.5 h-3.5 text-teal-600" />
-            <span>Time & Budget Optimizer</span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="text-center sm:text-left space-y-1.5">
+            <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-teal-100/80 text-teal-800 text-xs font-semibold">
+              <Clock className="w-3.5 h-3.5 text-teal-600" />
+              <span>Time & Budget Optimizer</span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
+              Plan Your Perfect Day
+            </h2>
+            <p className="text-sm text-slate-600 max-w-xl">
+              Tell us your available time and approximate budget. We will optimize the order, minimize travel backtracking, and recommend what to visit first.
+            </p>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
-            Plan Your Perfect Day
-          </h2>
-          <p className="text-sm text-slate-600 max-w-xl">
-            Tell us your available time and approximate budget. We will optimize the order, minimize travel backtracking, and recommend what to visit first.
-          </p>
+
+          {/* Quick Preferences Trigger Pill */}
+          <button
+            type="button"
+            onClick={() => setIsPreferencesModalOpen(true)}
+            className="self-center sm:self-auto flex items-center space-x-2 px-3.5 py-2 rounded-2xl bg-white border border-slate-200 hover:border-sky-400 hover:bg-sky-50/50 shadow-2xs text-xs font-bold text-slate-700 transition-all cursor-pointer group"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-sky-600 group-hover:rotate-12 transition-transform" />
+            <span>Profile: {getStyleEmoji()} • {preferences.pace}</span>
+            <span className="text-[10px] text-sky-600 font-semibold">(Edit)</span>
+          </button>
         </div>
 
         {/* Step 1: Available Time */}
         <div className="space-y-3">
           <label className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-slate-700">
             <Clock className="w-4 h-4 text-sky-600" />
-            <span>1. How much time do you have?</span>
+            <span>1. How much time do you have? ({preferences.availableHours}h currently set)</span>
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {timeOptions.map((opt) => {
@@ -94,7 +130,7 @@ export const PlanDayWidget: React.FC<PlanDayWidgetProps> = ({ onBuildPlan }) => 
                   key={opt.id}
                   type="button"
                   onClick={() => {
-                    setSelectedTime(opt.id);
+                    updatePreferences({ availableHours: opt.hours });
                     setPlanGenerated(false);
                   }}
                   className={`flex flex-col items-center justify-center p-3.5 rounded-2xl border text-center transition-all cursor-pointer min-h-[56px] ${
@@ -117,7 +153,7 @@ export const PlanDayWidget: React.FC<PlanDayWidgetProps> = ({ onBuildPlan }) => 
         <div className="space-y-3">
           <label className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-slate-700">
             <IndianRupee className="w-4 h-4 text-emerald-600" />
-            <span>2. What is your approximate budget?</span>
+            <span>2. What is your approximate budget? (₹{preferences.budgetAmount.toLocaleString()} currently set)</span>
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {budgetOptions.map((opt) => {
@@ -127,7 +163,7 @@ export const PlanDayWidget: React.FC<PlanDayWidgetProps> = ({ onBuildPlan }) => 
                   key={opt.id}
                   type="button"
                   onClick={() => {
-                    setSelectedBudget(opt.id);
+                    updatePreferences({ budgetAmount: opt.amount });
                     setPlanGenerated(false);
                   }}
                   className={`flex flex-col items-center justify-center p-3.5 rounded-2xl border text-center transition-all cursor-pointer min-h-[56px] ${
@@ -148,28 +184,35 @@ export const PlanDayWidget: React.FC<PlanDayWidgetProps> = ({ onBuildPlan }) => 
 
         {/* Step 3: Interests Multi-Select */}
         <div className="space-y-3">
-          <label className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-slate-700">
-            <Sparkles className="w-4 h-4 text-amber-500" />
-            <span>3. What interests you most today? (Select multiple)</span>
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-slate-700">
+              <Sparkles className="w-4 h-4 text-amber-500" />
+              <span>3. What interests you most today? (Select multiple)</span>
+            </label>
+            <button
+              type="button"
+              onClick={() => setIsPreferencesModalOpen(true)}
+              className="text-xs text-sky-600 hover:text-sky-700 font-semibold cursor-pointer"
+            >
+              See all categories &gt;
+            </button>
+          </div>
           <div className="flex flex-wrap gap-2">
-            {interestOptions.map((opt) => {
-              const isSelected = selectedInterests.includes(opt.id);
+            {availableCategories.map((cat) => {
+              const isSelected = preferences.interests.includes(cat.id);
               return (
                 <button
-                  key={opt.id}
+                  key={cat.id}
                   type="button"
-                  onClick={() => {
-                    toggleInterest(opt.id);
-                    setPlanGenerated(false);
-                  }}
+                  onClick={() => toggleInterest(cat.id)}
                   className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer min-h-[44px] ${
                     isSelected
                       ? 'bg-amber-500 text-white border-amber-500 shadow-2xs'
                       : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
                   }`}
                 >
-                  <span>{opt.label}</span>
+                  <span>{cat.icon}</span>
+                  <span>{cat.label}</span>
                   {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                 </button>
               );
@@ -196,19 +239,24 @@ export const PlanDayWidget: React.FC<PlanDayWidgetProps> = ({ onBuildPlan }) => 
         {/* Interactive Itinerary Teaser Confirmation Banner */}
         {planGenerated && (
           <div className="p-4 sm:p-5 rounded-2xl bg-white border border-emerald-200 shadow-xs text-slate-900 space-y-2 animate-fadeIn">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
               <div className="flex items-center space-x-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
                 <span className="font-bold text-sm text-emerald-900">
-                  Plan Preview Generated: {selectedTime.toUpperCase()} Trip under ₹{selectedBudget}
+                  Plan Preview Generated: {preferences.availableHours}h Trip under ₹{preferences.budgetAmount.toLocaleString()}
                 </span>
               </div>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
-                Optimized Sequence
-              </span>
+              <div className="flex items-center space-x-1.5 text-xs text-emerald-800 font-bold">
+                <span className="px-2 py-0.5 rounded-full bg-emerald-100">
+                  {getStyleEmoji()} Style
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-100 capitalize">
+                  {preferences.pace} Pace
+                </span>
+              </div>
             </div>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Based on your selection of <strong>{selectedInterests.join(', ')}</strong>, we suggest visiting <strong>Charminar (10:00 AM)</strong> first to avoid peak midday crowds, followed by a 5-minute walk to <strong>Old City Dum Biryani (12:30 PM)</strong>, ending with sunset at <strong>Golconda Fort (3:30 PM)</strong>.
+              Based on your preference for <strong>{preferences.interests.join(', ')}</strong> with a <strong>{preferences.pace}</strong> pace, we suggest starting at <strong>Charminar (10:00 AM)</strong>, taking a relaxed 5-minute stroll to <strong>Old City Dum Biryani (12:30 PM)</strong>, and wrapping up with sunset panoramas at <strong>Golconda Fort (3:30 PM)</strong>.
             </p>
           </div>
         )}

@@ -77,4 +77,17 @@ export interface GeoLocation {
   isManual?: boolean;
 }
 
+export type TravelStyle = 'solo' | 'couple' | 'family' | 'friends';
+export type TravelPace = 'relaxed' | 'moderate' | 'fast';
+
+export interface UserPreferences {
+  interests: CategoryId[];
+  availableHours: number;
+  budgetAmount: number;
+  travelStyle: TravelStyle;
+  pace: TravelPace;
+  isConfigured: boolean;
+}
+
+
 

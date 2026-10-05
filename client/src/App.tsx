@@ -5,9 +5,11 @@ import { PlaceCard } from './components/PlaceCard';
 import { PlanDayWidget } from './components/PlanDayWidget';
 import { PlaceDetailsModal } from './components/PlaceDetailsModal';
 import { LocationModal } from './components/LocationModal';
+import { PreferencesModal } from './components/PreferencesModal';
 import { ExploreView } from './components/ExploreView';
 import { MapView } from './components/MapView';
 import { LocationProvider, useLocation } from './context/LocationContext';
+import { PreferencesProvider, usePreferences } from './context/PreferencesContext';
 import { DEMO_PLACES } from './data/demoPlaces';
 import { CategoryId, Place } from './types/travel';
 import { 
@@ -21,7 +23,8 @@ import {
   Heart, 
   Bot,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  SlidersHorizontal
 } from 'lucide-react';
 
 interface BackendHealth {
@@ -45,6 +48,9 @@ function MainAppContent() {
     detectLocation, 
     setIsLocationModalOpen 
   } = useLocation();
+
+  // Preferences Context
+  const { preferences, setIsPreferencesModalOpen } = usePreferences();
 
   // Discovery state
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
@@ -129,6 +135,15 @@ function MainAppContent() {
     }
   };
 
+  const getStyleEmoji = () => {
+    switch (preferences.travelStyle) {
+      case 'solo': return '🎒 Solo';
+      case 'couple': return '💑 Couple';
+      case 'family': return '👨‍👩‍👧 Family';
+      case 'friends': return '👥 Friends';
+    }
+  };
+
   return (
     <MainLayout
       activeTab={activeTab}
@@ -144,6 +159,9 @@ function MainAppContent() {
     >
       {/* Location Selector Modal */}
       <LocationModal />
+
+      {/* Travel Profile & Preferences Modal */}
+      <PreferencesModal />
 
       {/* Place Details Modal */}
       <PlaceDetailsModal
@@ -181,6 +199,27 @@ function MainAppContent() {
             <p className="mt-4 text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
               Discover places, food, culture, and hidden gems around you. Plan smarter routes and make the most of your time.
             </p>
+
+            {/* Travel Preferences Summary Banner (Hero level) */}
+            <div className="mt-6 inline-flex flex-wrap items-center justify-center gap-2 p-1.5 px-3 rounded-2xl bg-amber-50/90 border border-amber-200/80 text-xs text-amber-900 shadow-2xs">
+              <span className="font-bold flex items-center gap-1">
+                <span>Trip Profile:</span>
+                <span>{getStyleEmoji()}</span>
+              </span>
+              <span className="text-amber-400">•</span>
+              <span>{preferences.availableHours}h Available</span>
+              <span className="text-amber-400">•</span>
+              <span>₹{preferences.budgetAmount.toLocaleString()} Budget</span>
+              <span className="text-amber-400">•</span>
+              <span className="capitalize">{preferences.pace} Pace</span>
+              <button
+                type="button"
+                onClick={() => setIsPreferencesModalOpen(true)}
+                className="ml-1 text-sky-700 hover:text-sky-800 font-bold underline cursor-pointer"
+              >
+                Customize
+              </button>
+            </div>
 
             {/* Location Status Alert / Toast */}
             {locationStatus === 'denied' && (
@@ -346,23 +385,31 @@ function MainAppContent() {
 
       {/* TAB 4: PLAN VIEW */}
       {activeTab === 'plan' && (
-        <div className="bg-white rounded-3xl border border-slate-200 p-8 sm:p-12 text-center space-y-4 shadow-xs animate-fadeIn">
-          <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto shadow-xs">
-            <Calendar className="w-7 h-7" />
+        <div className="space-y-6 animate-fadeIn">
+          {/* Plan View Top Header Banner */}
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold mb-2">
+                <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                <span>Smart Day Trip Planner</span>
+              </div>
+              <h2 className="text-2xl font-extrabold text-slate-900">Custom Day Plan & Itinerary</h2>
+              <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+                Configure your available hours, budget, and travel pace to preview optimized routes.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setIsPreferencesModalOpen(true)}
+              className="self-start sm:self-auto flex items-center space-x-2 px-4 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-2xl text-xs font-bold transition-all shadow-2xs cursor-pointer group"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-amber-600 group-hover:rotate-12 transition-transform" />
+              <span>Edit Travel Profile ({getStyleEmoji()} • {preferences.pace})</span>
+            </button>
           </div>
-          <div className="max-w-md mx-auto space-y-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-600">Upcoming in Phases 8 & 11</span>
-            <h2 className="text-2xl font-extrabold text-slate-900">Multi-Stop Route & Day Planner</h2>
-            <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
-              In Phases 8 & 11, we will implement distance matrix calculations, travel-time optimization, and sequential itinerary timelines.
-            </p>
-          </div>
-          <button
-            onClick={() => setActiveTab('home')}
-            className="px-5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer"
-          >
-            Try Plan Day Teaser on Home
-          </button>
+
+          {/* Interactive Plan Day Widget */}
+          <PlanDayWidget />
         </div>
       )}
 
@@ -442,7 +489,9 @@ function MainAppContent() {
 export default function App() {
   return (
     <LocationProvider>
-      <MainAppContent />
+      <PreferencesProvider>
+        <MainAppContent />
+      </PreferencesProvider>
     </LocationProvider>
   );
 }
