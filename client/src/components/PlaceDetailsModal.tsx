@@ -10,9 +10,15 @@ import {
   Utensils, 
   Car, 
   CalendarCheck,
-  Map as MapIcon
+  Map as MapIcon,
+  Navigation,
+  Footprints,
+  Bus,
+  ExternalLink
 } from 'lucide-react';
 import { Place } from '../types/travel';
+import { useLocation } from '../context/LocationContext';
+import { calculateHaversineDistanceKm, estimateTransportModes, formatDistanceKm } from '../services/routingService';
 
 interface PlaceDetailsModalProps {
   place: Place | null;
@@ -31,6 +37,8 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
   onToggleSave,
   onViewOnMap,
 }) => {
+  const { location } = useLocation();
+
   // Close on Escape key press & prevent background scroll
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -51,6 +59,9 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
   }, [isOpen, onClose]);
 
   if (!isOpen || !place) return null;
+
+  const distanceKm = calculateHaversineDistanceKm(location.lat, location.lon, place.lat, place.lon);
+  const routeOptions = estimateTransportModes(distanceKm);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-200">
@@ -273,29 +284,79 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
             </div>
           )}
 
-          {/* Transportation & Fare Estimates */}
-          {place.transportEstimates && place.transportEstimates.length > 0 && (
-            <div className="space-y-2.5 pt-2">
+          {/* Phase 8.2 Dynamic Route Options & Travel Times */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-slate-500">
-                <Car className="w-3.5 h-3.5 text-sky-600" />
-                <span>Estimated Travel Time & Fares</span>
+                <Navigation className="w-3.5 h-3.5 text-sky-600" />
+                <span>How to Get There · {formatDistanceKm(distanceKm)} away</span>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {place.transportEstimates.map((trans, idx) => (
-                  <div key={idx} className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between sm:flex-col sm:items-start">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-base">{trans.icon}</span>
-                      <span className="text-xs font-semibold text-slate-800">{trans.label}</span>
-                    </div>
-                    <div className="text-right sm:text-left sm:mt-1">
-                      <span className="text-xs font-bold text-sky-700 block">{trans.cost}</span>
-                      <span className="text-[11px] text-slate-400">{trans.time}</span>
-                    </div>
-                  </div>
-                ))}
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&origin=${location.lat},${location.lon}&destination=${place.lat},${place.lon}&travelmode=driving`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] font-bold text-sky-600 hover:text-sky-700 flex items-center space-x-1"
+                title="Open live navigation in Google Maps"
+              >
+                <span>Live Navigation</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              {/* 1. Walking */}
+              <div className="p-3 rounded-xl bg-slate-50/80 border border-slate-200/80 flex flex-col justify-between">
+                <div className="flex items-center space-x-1.5 text-slate-700">
+                  <Footprints className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-xs font-bold">Walking</span>
+                </div>
+                <div className="mt-2">
+                  <span className="text-sm font-black text-slate-900 block">{routeOptions.walk.timeMin} min</span>
+                  <span className="text-[11px] font-bold text-emerald-600">₹0 Free</span>
+                </div>
+              </div>
+
+              {/* 2. Bus / Metro */}
+              <div className="p-3 rounded-xl bg-slate-50/80 border border-slate-200/80 flex flex-col justify-between">
+                <div className="flex items-center space-x-1.5 text-slate-700">
+                  <Bus className="w-4 h-4 text-sky-600 shrink-0" />
+                  <span className="text-xs font-bold">Bus / Metro</span>
+                </div>
+                <div className="mt-2">
+                  <span className="text-sm font-black text-slate-900 block">{routeOptions.bus.timeMin} min</span>
+                  <span className="text-[11px] font-bold text-sky-700">{routeOptions.bus.costRange}</span>
+                </div>
+              </div>
+
+              {/* 3. Auto */}
+              <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-200/80 flex flex-col justify-between">
+                <div className="flex items-center space-x-1.5 text-amber-900">
+                  <span className="text-sm">🛺</span>
+                  <span className="text-xs font-bold">Auto</span>
+                </div>
+                <div className="mt-2">
+                  <span className="text-sm font-black text-slate-900 block">{routeOptions.auto.timeMin} min</span>
+                  <span className="text-[11px] font-bold text-amber-800">{routeOptions.auto.costRange}</span>
+                </div>
+              </div>
+
+              {/* 4. Cab */}
+              <div className="p-3 rounded-xl bg-slate-50/80 border border-slate-200/80 flex flex-col justify-between">
+                <div className="flex items-center space-x-1.5 text-slate-700">
+                  <Car className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span className="text-xs font-bold">Cab</span>
+                </div>
+                <div className="mt-2">
+                  <span className="text-sm font-black text-slate-900 block">{routeOptions.cab.timeMin} min</span>
+                  <span className="text-[11px] font-bold text-indigo-700">{routeOptions.cab.costRange}</span>
+                </div>
               </div>
             </div>
-          )}
+
+            <p className="text-[10px] text-slate-400">
+              Estimated via urban transit model from your {location.isManual ? 'selected hub' : 'active GPS location'}.
+            </p>
+          </div>
 
         </div>
 

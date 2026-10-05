@@ -111,6 +111,8 @@ export interface UserPreferences {
   isConfigured: boolean;
 }
 
+export type TransportMode = 'walk' | 'auto' | 'cab' | 'bus';
+
 export interface RouteLeg {
   legIndex: number;
   fromName: string;
@@ -122,10 +124,10 @@ export interface RouteLeg {
   distanceKm: number;
   estimatedTravelTimeMin: number;
   modeEstimates: {
-    walk: { timeMin: number; costInr: number };
-    auto: { timeMin: number; costInr: number };
-    cab: { timeMin: number; costInr: number };
-    bus: { timeMin: number; costInr: number };
+    walk: { timeMin: number; costInr: number; label: string };
+    auto: { timeMin: number; costInr: number; costRange: string; label: string };
+    cab: { timeMin: number; costInr: number; costRange: string; label: string };
+    bus: { timeMin: number; costInr: number; costRange: string; label: string };
   };
 }
 
@@ -142,6 +144,8 @@ export interface TripRoute {
   totalTravelTimeMin: number;
   totalVisitTimeMin: number;
   totalEstimatedDurationMin: number;
+  preferredMode: TransportMode;
+  totalEstimatedTransportCostInr: number;
   isOptimized: boolean;
   distanceSavedKm?: number;
 }

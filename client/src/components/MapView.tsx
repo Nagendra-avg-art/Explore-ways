@@ -286,6 +286,9 @@ export const MapView: React.FC<MapViewProps> = ({
                   <h4 className="text-xs sm:text-sm font-black text-slate-900 leading-tight">
                     {tripPlaces.length} Stops · {tripRoute.totalDistanceKm} km
                   </h4>
+                  <span className="text-[10px] text-slate-500 block">
+                    ~{tripRoute.totalTravelTimeMin}m via {tripRoute.preferredMode.toUpperCase()} · ~₹{tripRoute.totalEstimatedTransportCostInr} fare
+                  </span>
                 </div>
               </div>
 

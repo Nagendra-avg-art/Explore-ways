@@ -22,6 +22,8 @@ interface TripContextType {
   isOptimized: boolean;
   distanceSavedKm: number;
   tripRoute: TripRoute;
+  preferredMode: import('../types/travel').TransportMode;
+  setPreferredMode: (mode: import('../types/travel').TransportMode) => void;
 }
 
 const STORAGE_KEY = 'smart_travel_trip_place_ids';
@@ -50,6 +52,7 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isOptimized, setIsOptimized] = useState<boolean>(false);
   const [optimizedPlaceIds, setOptimizedPlaceIds] = useState<string[]>([]);
   const [distanceSavedKm, setDistanceSavedKm] = useState<number>(0);
+  const [preferredMode, setPreferredMode] = useState<import('../types/travel').TransportMode>('auto');
 
   // Sync to localStorage
   useEffect(() => {
@@ -89,8 +92,8 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       lon: location.lon,
       isActualGps: !location.isManual,
     };
-    return calculateTripRoute(origin, activeStops, isOptimized, distanceSavedKm);
-  }, [location, activeStops, isOptimized, distanceSavedKm]);
+    return calculateTripRoute(origin, activeStops, isOptimized, distanceSavedKm, preferredMode);
+  }, [location, activeStops, isOptimized, distanceSavedKm, preferredMode]);
 
   // Route Optimization (Nearest Neighbor)
   const optimizeTripRoute = () => {
@@ -207,6 +210,8 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isOptimized,
         distanceSavedKm,
         tripRoute,
+        preferredMode,
+        setPreferredMode,
       }}
     >
       {children}

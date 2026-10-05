@@ -71,25 +71,29 @@ export function parseVisitDurationMinutes(durationStr?: string): number {
  */
 export function estimateTransportModes(distanceKm: number): RouteLeg['modeEstimates'] {
   // Walking: ~4.5 km/h
-  const walkTimeMin = Math.round((distanceKm / 4.5) * 60);
+  const walkTimeMin = Math.max(1, Math.round((distanceKm / 4.5) * 60));
 
-  // Auto-rickshaw: ~20 km/h in Hyderabad traffic + 3 min pickup buffer. Base: ₹35, then ₹15/km
+  // Auto-rickshaw: ~20 km/h in Hyderabad traffic + 3 min pickup buffer. Base: ₹35 (first 1.5km), then ~₹16/km
   const autoTimeMin = Math.max(4, Math.round((distanceKm / 20) * 60 + 3));
-  const autoCostInr = Math.round(Math.max(35, 35 + Math.max(0, distanceKm - 1.5) * 16));
+  const minAuto = Math.round(Math.max(35, 35 + Math.max(0, distanceKm - 1.5) * 14));
+  const maxAuto = Math.round(Math.max(45, 45 + Math.max(0, distanceKm - 1.5) * 18));
+  const avgAutoCost = Math.round((minAuto + maxAuto) / 2);
 
-  // Cab: ~24 km/h + 5 min dispatch buffer. Base: ₹70, then ₹22/km
+  // Cab: ~24 km/h + 5 min dispatch buffer. Base: ₹70 (first 2km), then ~₹22/km
   const cabTimeMin = Math.max(5, Math.round((distanceKm / 24) * 60 + 5));
-  const cabCostInr = Math.round(Math.max(70, 70 + Math.max(0, distanceKm - 2) * 22));
+  const minCab = Math.round(Math.max(70, 70 + Math.max(0, distanceKm - 2) * 20));
+  const maxCab = Math.round(Math.max(90, 90 + Math.max(0, distanceKm - 2) * 25));
+  const avgCabCost = Math.round((minCab + maxCab) / 2);
 
   // Bus / Metro: Average speed ~16 km/h + 10 min waiting/walking buffer. Flat fare ~₹15-₹35
   const busTimeMin = Math.max(12, Math.round((distanceKm / 16) * 60 + 10));
   const busCostInr = distanceKm <= 5 ? 15 : distanceKm <= 12 ? 25 : 35;
 
   return {
-    walk: { timeMin: walkTimeMin, costInr: 0 },
-    auto: { timeMin: autoTimeMin, costInr: autoCostInr },
-    cab: { timeMin: cabTimeMin, costInr: cabCostInr },
-    bus: { timeMin: busTimeMin, costInr: busCostInr },
+    walk: { timeMin: walkTimeMin, costInr: 0, label: 'Walking' },
+    auto: { timeMin: autoTimeMin, costInr: avgAutoCost, costRange: `₹${minAuto}–₹${maxAuto}`, label: 'Auto Rickshaw' },
+    cab: { timeMin: cabTimeMin, costInr: avgCabCost, costRange: `₹${minCab}–₹${maxCab}`, label: 'Cab (Ola/Uber)' },
+    bus: { timeMin: busTimeMin, costInr: busCostInr, costRange: `₹${busCostInr}`, label: 'Bus / Metro' },
   };
 }
 
@@ -100,13 +104,14 @@ export function estimateTransportModes(distanceKm: number): RouteLeg['modeEstima
  * - Leg 1: Stop 1 -> Stop 2
  * - ...
  * - Total distance (sum of all leg distances)
- * - Estimated total travel time and visit time
+ * - Estimated total travel time, transport cost, and visit time
  */
 export function calculateTripRoute(
   origin: { lat: number; lon: number; label: string; isActualGps: boolean },
   stops: Place[],
   isOptimized: boolean = false,
-  distanceSavedKm: number = 0
+  distanceSavedKm: number = 0,
+  preferredMode: import('../types/travel').TransportMode = 'auto'
 ): TripRoute {
   if (stops.length === 0) {
     return {
@@ -117,6 +122,8 @@ export function calculateTripRoute(
       totalTravelTimeMin: 0,
       totalVisitTimeMin: 0,
       totalEstimatedDurationMin: 0,
+      preferredMode,
+      totalEstimatedTransportCostInr: 0,
       isOptimized: false,
       distanceSavedKm: 0,
     };
@@ -130,13 +137,41 @@ export function calculateTripRoute(
   let totalDistanceKm = 0;
   let totalTravelTimeMin = 0;
   let totalVisitTimeMin = 0;
+  let totalTransportCostInr = 0;
 
   stops.forEach((stop, index) => {
     const legDistance = calculateHaversineDistanceKm(currentLat, currentLon, stop.lat, stop.lon);
     const modeEst = estimateTransportModes(legDistance);
     
-    // Default primary travel time: auto/cab speed for distances > 1.2km, walking for <= 1.2km
-    const estimatedTime = legDistance <= 1.2 ? modeEst.walk.timeMin : modeEst.auto.timeMin;
+    // Pick travel time and cost based on user preferred mode
+    let legTravelTime: number;
+    let legCost: number;
+
+    switch (preferredMode) {
+      case 'walk':
+        legTravelTime = modeEst.walk.timeMin;
+        legCost = 0;
+        break;
+      case 'cab':
+        legTravelTime = modeEst.cab.timeMin;
+        legCost = modeEst.cab.costInr;
+        break;
+      case 'bus':
+        legTravelTime = modeEst.bus.timeMin;
+        legCost = modeEst.bus.costInr;
+        break;
+      case 'auto':
+      default:
+        // For very short hops under 600m, walking is practical, otherwise auto
+        if (legDistance <= 0.6) {
+          legTravelTime = modeEst.walk.timeMin;
+          legCost = 0;
+        } else {
+          legTravelTime = modeEst.auto.timeMin;
+          legCost = modeEst.auto.costInr;
+        }
+        break;
+    }
 
     legs.push({
       legIndex: index,
@@ -147,12 +182,13 @@ export function calculateTripRoute(
       toLat: stop.lat,
       toLon: stop.lon,
       distanceKm: legDistance,
-      estimatedTravelTimeMin: estimatedTime,
+      estimatedTravelTimeMin: legTravelTime,
       modeEstimates: modeEst,
     });
 
     totalDistanceKm += legDistance;
-    totalTravelTimeMin += estimatedTime;
+    totalTravelTimeMin += legTravelTime;
+    totalTransportCostInr += legCost;
     totalVisitTimeMin += parseVisitDurationMinutes(stop.visitDuration);
 
     currentLat = stop.lat;
@@ -168,6 +204,8 @@ export function calculateTripRoute(
     totalTravelTimeMin,
     totalVisitTimeMin,
     totalEstimatedDurationMin: totalTravelTimeMin + totalVisitTimeMin,
+    preferredMode,
+    totalEstimatedTransportCostInr: totalTransportCostInr,
     isOptimized,
     distanceSavedKm: Math.round(distanceSavedKm * 10) / 10,
   };
