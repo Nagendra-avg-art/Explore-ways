@@ -96,8 +96,17 @@ export const DEMO_PLACES: Place[] = [
     visitDuration: '1–2 hrs',
     imageUrl: 'https://images.unsplash.com/photo-1572445271230-a78b5944a659?auto=format&fit=crop&w=800&q=80',
     shortDescription: '16th-century landmark mosque with 4 grand minarets and bustling traditional bazaars.',
+    fullDescription: 'Constructed in 1591 by Muhammad Quli Qutb Shah, the fifth ruler of the Qutb Shahi dynasty, Charminar is the global emblem of Hyderabad. The structure features four grand arches facing the cardinal directions, supporting a square structure with minarets towering 48.7 meters high. The surrounding alleys host historic perfume, pearl, and textile shops.',
     whyRecommended: 'Iconic city symbol; best visited in morning light to explore the surrounding street markets with ease.',
-    tags: ['Monument', 'Heritage', 'Old City']
+    tags: ['Monument', 'Heritage', 'Old City'],
+    openingHours: '9:30 AM – 5:30 PM (Daily)',
+    bestTimeToVisit: 'Morning (9:30 AM – 11:30 AM) to avoid peak traffic',
+    nearbyFood: ['Nimrah Cafe Irani Chai (50m)', 'Shadab Dum Biryani (600m)', 'Govind Dosa (300m)'],
+    transportEstimates: [
+      { mode: 'auto', label: 'Auto Rickshaw', time: '14 min', cost: '₹90 – ₹130', icon: '🛺' },
+      { mode: 'cab', label: 'Cab / Taxi', time: '12 min', cost: '₹180 – ₹240', icon: '🚕' },
+      { mode: 'bus', label: 'City Bus (#7Z)', time: '28 min', cost: '₹20', icon: '🚌' },
+    ]
   },
   {
     id: 'golconda',
@@ -111,8 +120,16 @@ export const DEMO_PLACES: Place[] = [
     visitDuration: '2–3 hrs',
     imageUrl: 'https://images.unsplash.com/photo-1582510003544-4d00b7f74220?auto=format&fit=crop&w=800&q=80',
     shortDescription: 'Sprawling medieval fortress famed for acoustics, royal palaces, and panoramic sunset views.',
-    whyRecommended: 'Top-rated scenic landmark; best visited between 3 PM and 6 PM for gentle breezes and sunset.',
-    tags: ['Fortress', 'Acoustics', 'Sunset Views']
+    fullDescription: 'Once the capital of the medieval Golconda Sultanate, this colossal fort spans over 11 kilometers of outer wall with 8 massive gates. It is globally renowned for its acoustic engineering: a hand clap at the entry pavilion can be clearly heard at the highest point of Bala Hissar, a kilometer away.',
+    whyRecommended: 'Top-rated scenic landmark; best visited between 3 PM and 6 PM for gentle breezes and sunset views.',
+    tags: ['Fortress', 'Acoustics', 'Sunset Views'],
+    openingHours: '9:00 AM – 5:30 PM (Daily)',
+    bestTimeToVisit: 'Late Afternoon (3:00 PM – 5:30 PM)',
+    nearbyFood: ['Fort View Cafe (200m)', 'Shah Ghouse Tolichowki (2.5 km)'],
+    transportEstimates: [
+      { mode: 'auto', label: 'Auto Rickshaw', time: '24 min', cost: '₹150 – ₹200', icon: '🛺' },
+      { mode: 'cab', label: 'Cab / Taxi', time: '20 min', cost: '₹280 – ₹360', icon: '🚕' },
+    ]
   },
   {
     id: 'birla-mandir',
@@ -126,8 +143,16 @@ export const DEMO_PLACES: Place[] = [
     visitDuration: '1–1.5 hrs',
     imageUrl: 'https://images.unsplash.com/photo-1620766182966-c6eb5ed2b788?auto=format&fit=crop&w=800&q=80',
     shortDescription: 'Majestic white marble temple atop Naubat Pahad overlooking the Hussain Sagar lake.',
+    fullDescription: 'Built with 2,000 tonnes of pure white Rajasthani marble over 10 years, this temple combines South Indian, Utkal, and Rajasthani temple architectural styles. Sitting on a 280-foot high hill, it provides peaceful views of Hyderabad and the twin city Secunderabad.',
     whyRecommended: 'Peaceful ambiance with panoramic city views; ideal for a calm evening spiritual visit.',
-    tags: ['Spiritual', 'Marble', 'Panoramic View']
+    tags: ['Spiritual', 'Marble', 'Panoramic View'],
+    openingHours: '7:00 AM – 12:00 PM, 3:00 PM – 9:00 PM',
+    bestTimeToVisit: 'Sunset & Dusk (5:30 PM – 7:30 PM)',
+    nearbyFood: ['Bikanervala Basheerbagh (1 km)', 'Chutneys Nagarjuna Circle (2.2 km)'],
+    transportEstimates: [
+      { mode: 'auto', label: 'Auto Rickshaw', time: '12 min', cost: '₹80 – ₹110', icon: '🛺' },
+      { mode: 'cab', label: 'Cab / Taxi', time: '10 min', cost: '₹150 – ₹200', icon: '🚕' },
+    ]
   },
   {
     id: 'chilkur-balaji',
@@ -141,8 +166,16 @@ export const DEMO_PLACES: Place[] = [
     visitDuration: '2 hrs',
     imageUrl: 'https://images.unsplash.com/photo-1590076215667-873d1db96043?auto=format&fit=crop&w=800&q=80',
     shortDescription: 'Ancient sacred temple by Osman Sagar, affectionately known as the "Visa Balaji" temple.',
+    fullDescription: 'One of the oldest temples in Telangana, built over 500 years ago during the reign of Madanna and Akkanna. Uniquely, the temple does not accept any monetary donations or hundi, upholding equal treatment of all pilgrims.',
     whyRecommended: 'Unique tradition of 108 parikramas with peaceful lake breezes outside the city center.',
-    tags: ['Ancient', 'Tradition', 'Lake Side']
+    tags: ['Ancient', 'Tradition', 'Lake Side'],
+    openingHours: '6:00 AM – 8:00 PM (Daily)',
+    bestTimeToVisit: 'Early Morning (6:30 AM – 8:30 AM)',
+    nearbyFood: ['Village Dosa Hubs near Osman Sagar (300m)'],
+    transportEstimates: [
+      { mode: 'cab', label: 'Cab / Taxi', time: '35 min', cost: '₹450 – ₹600', icon: '🚕' },
+      { mode: 'auto', label: 'Auto Rickshaw', time: '45 min', cost: '₹300 – ₹400', icon: '🛺' },
+    ]
   },
   {
     id: 'paradise-biryani',
@@ -156,8 +189,16 @@ export const DEMO_PLACES: Place[] = [
     visitDuration: '1 hr',
     imageUrl: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=800&q=80',
     shortDescription: 'Slow-cooked fragrant Hyderabadi Dum Biryani spiced with saffron, cardamom, and caramelized onions.',
+    fullDescription: 'Experience authentic handi dum biryani where marinated meat and long-grain basmati rice are sealed with dough and cooked over slow charcoal coals (dum pukht) to seal in all aromatic spices.',
     whyRecommended: 'Must-experience culinary tradition; conveniently located 5 minutes walking distance from Charminar.',
-    tags: ['Biryani', 'Local Speciality', 'Budget Friendly']
+    tags: ['Biryani', 'Local Speciality', 'Budget Friendly'],
+    openingHours: '11:30 AM – 11:30 PM (Daily)',
+    bestTimeToVisit: 'Lunch (12:30 PM – 2:30 PM) or Dinner (7:30 PM – 9:30 PM)',
+    nearbyFood: ['Hotel Shadab (Next door)', 'Matka Phirni vendors (50m)'],
+    transportEstimates: [
+      { mode: 'walk', label: 'Walking from Charminar', time: '5 min', cost: '₹0', icon: '🚶' },
+      { mode: 'auto', label: 'Auto Rickshaw', time: '15 min', cost: '₹90 – ₹130', icon: '🛺' },
+    ]
   },
   {
     id: 'niloufer-cafe',
@@ -171,8 +212,16 @@ export const DEMO_PLACES: Place[] = [
     visitDuration: '45 min',
     imageUrl: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&w=800&q=80',
     shortDescription: 'Legendary 1978 tea parlor serving rich, creamy Irani Chai with hot Osmania biscuits and bun maska.',
+    fullDescription: 'Founded in 1978 by Shri A. Babu Rao, Cafe Niloufer is an institution of Irani tea culture. The tea is brewed with milk reduced over hours until thick and velvety, served with salty-sweet melt-in-mouth Osmania biscuits fresh from wood-fired ovens.',
     whyRecommended: 'Beloved local morning ritual; highly affordable (under ₹100) and lively community energy.',
-    tags: ['Irani Chai', 'Osmania Biscuits', 'Local Culture']
+    tags: ['Irani Chai', 'Osmania Biscuits', 'Local Culture'],
+    openingHours: '4:00 AM – 11:30 PM (Daily)',
+    bestTimeToVisit: 'Morning Tea (6:30 AM – 9:00 AM)',
+    nearbyFood: ['Pista House Lakdikapul (500m)'],
+    transportEstimates: [
+      { mode: 'auto', label: 'Auto Rickshaw', time: '16 min', cost: '₹100 – ₹140', icon: '🛺' },
+      { mode: 'cab', label: 'Cab / Taxi', time: '14 min', cost: '₹180 – ₹240', icon: '🚕' },
+    ]
   },
   {
     id: 'durgam-cheruvu',
@@ -186,8 +235,16 @@ export const DEMO_PLACES: Place[] = [
     visitDuration: '1.5–2 hrs',
     imageUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
     shortDescription: 'Freshwater lake with illuminated hanging cable-stayed bridge, walking promenade, and boating.',
+    fullDescription: 'Hidden amidst granite rock formations between Jubilee Hills and Madhapur, Durgam Cheruvu (the "Secret Lake") features an architecturally acclaimed extradosed cable-stayed bridge illuminated with dynamic multi-color LED lights at night.',
     whyRecommended: 'Scenic evening breeze with waterfront cafes and skyline photography opportunities.',
-    tags: ['Waterfront', 'Boating', 'Skyline View']
+    tags: ['Waterfront', 'Boating', 'Skyline View'],
+    openingHours: '6:00 AM – 8:30 PM (Boating opens at 10 AM)',
+    bestTimeToVisit: 'Evening (5:00 PM – 7:30 PM)',
+    nearbyFood: ['Olive Bistro (Overlooking lake)', 'Concu Jubilee Hills (2 km)'],
+    transportEstimates: [
+      { mode: 'auto', label: 'Auto Rickshaw', time: '28 min', cost: '₹180 – ₹240', icon: '🛺' },
+      { mode: 'cab', label: 'Cab / Taxi', time: '22 min', cost: '₹300 – ₹420', icon: '🚕' },
+    ]
   },
   {
     id: 'laad-bazaar',
@@ -201,8 +258,16 @@ export const DEMO_PLACES: Place[] = [
     visitDuration: '1–2 hrs',
     imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80',
     shortDescription: 'Historic pedestrian shopping street famous for handcrafted lacquer bangles, pearls, and perfumes (ittar).',
+    fullDescription: 'Operational since the days of the Qutb Shahis, this kilometer-long market branches directly off Charminar. Skilled artisans set shimmering glass stones into warm natural resin bangles on open storefronts.',
     whyRecommended: 'Vibrant colors and authentic street bargain shopping right in the heart of old town.',
-    tags: ['Bangles', 'Pearls', 'Handmade']
+    tags: ['Bangles', 'Pearls', 'Handmade'],
+    openingHours: '11:00 AM – 10:30 PM (Daily)',
+    bestTimeToVisit: 'Evening (5:00 PM – 8:30 PM)',
+    nearbyFood: ['Pista House Charminar (200m)', 'Subhan Bakery (1.5 km)'],
+    transportEstimates: [
+      { mode: 'walk', label: 'Walking from Charminar', time: '2 min', cost: '₹0', icon: '🚶' },
+      { mode: 'auto', label: 'Auto Rickshaw', time: '15 min', cost: '₹90 – ₹130', icon: '🛺' },
+    ]
   },
   {
     id: 'chowmahalla',
@@ -216,8 +281,16 @@ export const DEMO_PLACES: Place[] = [
     visitDuration: '2 hrs',
     imageUrl: 'https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=800&q=80',
     shortDescription: 'Grand palace of the Nizams with European neo-classical facades, Belgian crystal chandeliers, and vintage car collection.',
+    fullDescription: 'Chowmahalla (literally "Four Palaces") was the seat of the Asaf Jahi dynasty where the Nizams entertained official royal guests. Its Khilwat Mubarak durbar hall features 19 gigantic Belgian crystal chandeliers and pure marble coronation throne.',
     whyRecommended: 'Exquisite royal architecture and peaceful courtyards just 10 mins from Charminar.',
-    tags: ['Palace', 'Chandeliers', 'Vintage Cars']
+    tags: ['Palace', 'Chandeliers', 'Vintage Cars'],
+    openingHours: '10:00 AM – 5:00 PM (Closed on Fridays)',
+    bestTimeToVisit: 'Morning (10:00 AM – 1:00 PM)',
+    nearbyFood: ['Rumaan Restaurant (700m)', 'Nayab Hotel Paya & Naan (1.2 km)'],
+    transportEstimates: [
+      { mode: 'auto', label: 'Auto Rickshaw', time: '16 min', cost: '₹100 – ₹140', icon: '🛺' },
+      { mode: 'cab', label: 'Cab / Taxi', time: '14 min', cost: '₹190 – ₹250', icon: '🚕' },
+    ]
   },
   {
     id: 'shilparamam',
@@ -231,7 +304,15 @@ export const DEMO_PLACES: Place[] = [
     visitDuration: '2–3 hrs',
     imageUrl: 'https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?auto=format&fit=crop&w=800&q=80',
     shortDescription: 'Rural folk village celebrating traditional arts, crafts exhibitions, live puppetry, and ethnic performances.',
+    fullDescription: 'Spread over 65 acres in the heart of HITEC City, Shilparamam was established to motivate and preserve traditional crafts. It features thatched rural huts, terracotta sculptures, live weaving looms, and open-air amphitheaters for Kuchipudi dances.',
     whyRecommended: 'Great family outing for artisan shopping, street food, and folk dances.',
-    tags: ['Crafts', 'Folk Dance', 'Family Friendly']
+    tags: ['Crafts', 'Folk Dance', 'Family Friendly'],
+    openingHours: '10:30 AM – 8:30 PM (Daily)',
+    bestTimeToVisit: 'Afternoon to Evening (4:00 PM – 8:00 PM)',
+    nearbyFood: ['Village Chaat Court (Inside)', 'Rayalaseema Ruchulu (1 km)'],
+    transportEstimates: [
+      { mode: 'auto', label: 'Auto Rickshaw', time: '32 min', cost: '₹220 – ₹290', icon: '🛺' },
+      { mode: 'cab', label: 'Cab / Taxi', time: '26 min', cost: '₹340 – ₹480', icon: '🚕' },
+    ]
   }
 ];
