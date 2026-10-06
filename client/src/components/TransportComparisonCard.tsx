@@ -1,5 +1,5 @@
-import React from 'react';
-import { Check, Footprints, Bus, Car, ArrowRight, Info, ShieldCheck, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { Check, Footprints, Bus, Car, ArrowRight, Info, ShieldCheck, AlertCircle, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { TransportMode } from '../types/travel';
 import { computeTransportTimeDetails } from '../services/transportTimeService';
 
@@ -26,7 +26,9 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
   className = '',
   hideHeader = false,
 }) => {
-  // Compute honest mode-by-mode details from our dedicated Phase 9.2 transport time service
+  const [showAssumptions, setShowAssumptions] = useState(false);
+
+  // Compute honest mode-by-mode details from our dedicated services
   const modeDetails = computeTransportTimeDetails(distanceKm, roadDrivingTimeMin, isRoadNetwork);
 
   const modeCards = [
@@ -66,8 +68,8 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-sky-600 block">
                 Transport Mode Comparison
               </span>
-              <span className="px-2 py-0.2 rounded-md bg-sky-100 text-sky-800 text-[10px] font-extrabold">
-                Phase 9.2 Real Travel Times
+              <span className="px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 text-[10px] font-extrabold">
+                Phase 9.3 Travel Times &amp; Fares
               </span>
             </div>
 
@@ -150,8 +152,8 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
                 )}
               </div>
 
-              {/* Required 4 Metrics Rows: Mode, Distance, Travel time, Data/estimate status */}
-              <div className="space-y-2 pt-2 border-t border-slate-100 text-xs">
+              {/* Required 4 Metrics Rows: Mode, Distance, Travel time, Estimated Fare, Status */}
+              <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs">
                 {/* 1. Distance */}
                 <div className="flex items-baseline justify-between">
                   <span className="text-slate-500 font-medium">Distance:</span>
@@ -178,7 +180,23 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
                   </span>
                 </div>
 
-                {/* 3. Data/estimate status */}
+                {/* 3. Estimated Fare (Phase 9.3) */}
+                <div className="flex items-baseline justify-between">
+                  <span className="text-slate-500 font-medium">Fare:</span>
+                  <span
+                    className={`font-black ${
+                      m.mode === 'walk'
+                        ? 'text-emerald-700 text-xs font-black'
+                        : m.isAvailable
+                        ? 'text-slate-900 text-xs font-black'
+                        : 'text-slate-400 italic text-[11px]'
+                    }`}
+                  >
+                    {m.fareEstimate?.fareDisplay || (m.mode === 'walk' ? 'Free' : 'Unavailable')}
+                  </span>
+                </div>
+
+                {/* 4. Data/estimate status */}
                 <div className="flex items-center justify-between pt-0.5">
                   <span className="text-slate-500 font-medium">Status:</span>
                   <span
@@ -207,17 +225,39 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
         })}
       </div>
 
-      {/* Honest Data Rule Notice */}
-      <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-1">
-        <div className="flex items-center space-x-1.5 font-bold text-slate-800">
-          <Info className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-          <span>Phase 9.2 Realistic Travel-Time Notes</span>
+      {/* Assumptions / Transparency Interaction */}
+      <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-1.5 font-bold text-slate-800">
+            <Info className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+            <span>Phase 9.3 Transparent Travel &amp; Fare Notes</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAssumptions(!showAssumptions)}
+            className="text-[11px] font-bold text-sky-700 hover:text-sky-900 flex items-center space-x-1 cursor-pointer select-none"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            <span>{showAssumptions ? 'Hide assumptions' : 'How estimated?'}</span>
+            {showAssumptions ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
         </div>
+
         <p className="text-[11px] text-slate-500 leading-relaxed pl-5">
-          • <strong>Walking:</strong> Based on the genuine {distanceKm} km OpenStreetMap road network pedestrian pace (~4.8 km/h).<br />
-          • <strong>Auto & Cab:</strong> Derived from real OSRM road travel times with urban traffic and signal variance ranges.<br />
-          • <strong>Bus / Metro:</strong> Marked as unavailable until actual GTFS transit schedule lines are connected. No arbitrary times are invented.
+          • <strong>Walking:</strong> Always Free (₹0) on the {distanceKm} km OpenStreetMap road route.<br />
+          • <strong>Auto &amp; Cab:</strong> Centralized distance-based estimates with traffic variance ranges. Not live booking prices.<br />
+          • <strong>Bus / Metro:</strong> Marked as unavailable until actual GTFS transit lines are integrated.
         </p>
+
+        {/* Collapsible Assumptions Details */}
+        {showAssumptions && (
+          <div className="mt-2 pt-2 border-t border-slate-200/80 pl-5 space-y-1.5 text-[11px] text-slate-600 animate-fadeIn">
+            <div className="font-bold text-slate-800">Centralized Fare Estimation Assumptions:</div>
+            <div>• <strong>Auto Rickshaw:</strong> Base ₹35 for first 1.5 km + ₹16/km (city standard) with ±15% traffic and lane variance. Excludes night charges.</div>
+            <div>• <strong>Cab (Ola/Uber):</strong> Economy sedan/hatchback base ₹75 for first 2 km + ₹18/km with traffic buffer. Excludes live surge pricing, tolls, and peak multipliers.</div>
+            <div>• <strong>No False Precision:</strong> All estimates use rounded uncertainty ranges (e.g. ₹120–₹160) rather than pseudo-exact quotes.</div>
+          </div>
+        )}
       </div>
 
       {/* Selected Mode Notice if Bus / Metro is active */}
@@ -225,7 +265,7 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
         <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start space-x-2 animate-fadeIn">
           <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
           <p className="leading-relaxed">
-            <strong>Public Transit Note:</strong> Fixed bus/metro schedule lines are not connected for this specific pair. In the itinerary, auto rickshaw time (~{modeDetails.auto.travelTimeDisplay}) will serve as the provisional urban transit baseline.
+            <strong>Public Transit Note:</strong> Fixed bus/metro schedule lines and fare slabs are not connected for this specific pair. In the itinerary, auto rickshaw time (~{modeDetails.auto.travelTimeDisplay}) and fare (~{modeDetails.auto.fareEstimate?.fareDisplay}) serve as the provisional urban transit baseline.
           </p>
         </div>
       )}

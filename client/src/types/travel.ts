@@ -124,6 +124,52 @@ export interface RouteManeuver {
 
 export type DataStatus = 'road-route' | 'estimated' | 'unavailable';
 
+export interface FareEstimate {
+  mode: TransportMode;
+  modeLabel: string;
+  isAvailable: boolean;
+  minFareInr: number;
+  maxFareInr: number;
+  fareDisplay: string; // e.g. "Free", "₹120–₹160 estimated", "Unavailable"
+  isEstimate: boolean;
+  currency: string; // "INR"
+  assumptions: string;
+  breakdown?: {
+    baseFare: number;
+    distanceComponent: number;
+    bufferComponent?: number;
+  };
+}
+
+export interface LegFareComparison {
+  fromName: string;
+  toName: string;
+  distanceKm: number;
+  modes: {
+    walk: FareEstimate;
+    auto: FareEstimate;
+    cab: FareEstimate;
+    bus: FareEstimate;
+  };
+}
+
+export interface TripFareSummary {
+  preferredMode: TransportMode;
+  totalMinFareInr: number;
+  totalMaxFareInr: number;
+  totalFareDisplay: string; // e.g. "Free", "₹240–₹320 estimated", "Unavailable"
+  currency: string;
+  isEstimate: boolean;
+  assumptions: string;
+  legs: {
+    legIndex: number;
+    fromName: string;
+    toName: string;
+    distanceKm: number;
+    fare: FareEstimate;
+  }[];
+}
+
 export interface TransportTimeDetail {
   mode: TransportMode;
   modeLabel: string;
@@ -138,6 +184,7 @@ export interface TransportTimeDetail {
   statusLabel: string;
   statusDescription: string;
   assumptions?: string;
+  fareEstimate?: FareEstimate;
 }
 
 export interface RouteTransportComparison {
@@ -151,6 +198,12 @@ export interface RouteTransportComparison {
     auto: TransportTimeDetail;
     cab: TransportTimeDetail;
     bus: TransportTimeDetail;
+  };
+  fares?: {
+    walk: FareEstimate;
+    auto: FareEstimate;
+    cab: FareEstimate;
+    bus: FareEstimate;
   };
 }
 
@@ -168,6 +221,7 @@ export interface RouteLeg {
   isRoadNetwork?: boolean;
   maneuvers?: RouteManeuver[];
   transportComparison?: RouteTransportComparison;
+  fareComparison?: LegFareComparison;
   modeEstimates: {
     walk: { timeMin: number; costInr: number; label: string; fareDisplay?: string; distanceKm?: number; statusLabel?: string };
     auto: { timeMin: number; costInr: number; costRange: string; label: string; fareDisplay?: string; distanceKm?: number; timeDisplay?: string; statusLabel?: string };
@@ -197,6 +251,8 @@ export interface TripRoute {
   isRoadNetwork?: boolean;
   routingSource?: string;
   selectedModeTimeDisplay?: string;
+  fareSummary?: TripFareSummary;
+  selectedModeFareDisplay?: string;
 }
 
 

@@ -3,20 +3,22 @@ import {
   TransportTimeDetail, 
   RouteTransportComparison 
 } from '../types/travel';
+import { computeFareEstimates } from './fareEstimationService';
 
 /**
- * Phase 9.2: Transport-Specific Travel Time Service
+ * Phase 9.2 & 9.3: Transport-Specific Travel Time and Fare Service
  * 
- * Provides transparent, honest travel-time estimation for each transport mode.
+ * Provides transparent, honest travel-time and fare estimation for each transport mode.
  * Rules:
  * 1. Never multiply distance by arbitrary speeds and present as real live data.
- * 2. Walking uses actual road distance at healthy pedestrian speed (~4.8 km/h = 12.5 min/km).
+ * 2. Walking uses actual road distance at healthy pedestrian speed (~4.8 km/h = 12.5 min/km) and fare is ₹0.
  * 3. Cab and Auto use real OSRM road network driving time with realistic urban traffic ranges.
- * 4. Bus / Metro is marked as "Route unavailable / Not available" until genuine transit schedules exist.
+ * 4. Auto and Cab fares are computed from centralized distance-based models with uncertainty ranges.
+ * 5. Bus / Metro is marked as "Route unavailable / Unavailable" until genuine transit schedules exist.
  */
 
 /**
- * Computes mode-by-mode travel times for a given road distance and driving duration.
+ * Computes mode-by-mode travel times and fare estimates for a given road distance and driving duration.
  */
 export function computeTransportTimeDetails(
   distanceKm: number,
@@ -29,6 +31,7 @@ export function computeTransportTimeDetails(
   bus: TransportTimeDetail;
 } {
   const safeDistance = Math.max(0.1, Math.round(distanceKm * 10) / 10);
+  const fares = computeFareEstimates(safeDistance);
 
   // 1. Walking: ~4.8 km/h (12.5 min per km) over real road network
   // For 1.2 km: Math.round(1.2 * 12.5) = 15-16 min (Matches prompt example: 16 min)
@@ -47,7 +50,8 @@ export function computeTransportTimeDetails(
     statusDescription: isRoadNetwork 
       ? 'Pedestrian duration calculated along actual road network (4.8 km/h)' 
       : 'Estimated walking duration',
-    assumptions: 'Pedestrian pace at 4.8 km/h without traffic delays'
+    assumptions: 'Pedestrian pace at 4.8 km/h without traffic delays',
+    fareEstimate: fares.walk,
   };
 
   // 2. Cab: OSRM driving duration base with realistic urban pickup & traffic variance
@@ -80,7 +84,8 @@ export function computeTransportTimeDetails(
     status: 'estimated',
     statusLabel: 'Estimated',
     statusDescription: 'Urban road driving estimate with traffic and signal variance',
-    assumptions: 'Point-to-point road transit with traffic buffer'
+    assumptions: 'Point-to-point road transit with traffic buffer',
+    fareEstimate: fares.cab,
   };
 
   // 3. Auto Rickshaw: Slightly higher pickup and navigation variance in dense city lanes
@@ -109,7 +114,8 @@ export function computeTransportTimeDetails(
     status: 'estimated',
     statusLabel: 'Estimated',
     statusDescription: 'City auto transit estimate with lane traffic buffer',
-    assumptions: 'Urban point-to-point auto rickshaw'
+    assumptions: 'Urban point-to-point auto rickshaw',
+    fareEstimate: fares.auto,
   };
 
   // 4. Bus / Metro: Public transit route data not yet integrated
@@ -126,7 +132,8 @@ export function computeTransportTimeDetails(
     status: 'unavailable',
     statusLabel: 'Not available',
     statusDescription: 'Route data not available (GTFS transit schedule integration coming next)',
-    assumptions: 'Fixed-line bus/metro schedule data not connected yet'
+    assumptions: 'Fixed-line bus/metro schedule data not connected yet',
+    fareEstimate: fares.bus,
   };
 
   return {
@@ -149,6 +156,7 @@ export function buildRouteTransportComparison(
   routingSource: string = 'osrm'
 ): RouteTransportComparison {
   const modes = computeTransportTimeDetails(distanceKm, roadDrivingTimeMin, isRoadNetwork);
+  const fares = computeFareEstimates(distanceKm);
 
   return {
     fromName,
@@ -157,6 +165,7 @@ export function buildRouteTransportComparison(
     isRoadNetwork,
     routingSource,
     modes,
+    fares,
   };
 }
 

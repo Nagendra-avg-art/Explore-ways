@@ -353,17 +353,22 @@ export const MapView: React.FC<MapViewProps> = ({
                     : `~${tripRoute.selectedModeTimeDisplay || `${tripRoute.totalTravelTimeMin} min`}`}
                 </span>
               </div>
-              <span className="text-[10px] text-slate-500 font-medium block mt-0.5">
-                {preferredMode === 'bus'
-                  ? 'Bus / Metro: Route unavailable (Not available)'
-                  : `via ${
-                      preferredMode === 'walk'
-                        ? 'Walking (Road route)'
-                        : preferredMode === 'cab'
-                        ? 'Cab (Estimated)'
-                        : 'Auto (Estimated)'
-                    }`}
-              </span>
+              <div className="flex items-center justify-between text-[10px] text-slate-500 font-medium mt-0.5">
+                <span>
+                  {preferredMode === 'bus'
+                    ? 'Bus / Metro: Unavailable'
+                    : `via ${
+                        preferredMode === 'walk'
+                          ? 'Walking'
+                          : preferredMode === 'cab'
+                          ? 'Cab'
+                          : 'Auto'
+                      }`}
+                </span>
+                <span className="font-extrabold text-slate-700">
+                  Fare: {preferredMode === 'walk' ? 'Free' : preferredMode === 'bus' ? 'Unavailable' : tripRoute.selectedModeFareDisplay || 'Estimated'}
+                </span>
+              </div>
             </div>
 
             {/* Explicit Waypoint Chain: Starting City → Stop 1 → Stop 2 */}

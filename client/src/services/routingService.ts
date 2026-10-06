@@ -69,42 +69,48 @@ import {
   computeTransportTimeDetails, 
   buildRouteTransportComparison 
 } from './transportTimeService';
+import { 
+  computeFareEstimates, 
+  buildLegFareComparison, 
+  computeTripFareSummary 
+} from './fareEstimationService';
 
 /**
  * Calculates honest transit time and transport options for different travel modes.
- * In Phase 9.2: Mode-specific travel times are calculated transparently with realistic ranges.
+ * In Phase 9.3: Centralized distance-based fare estimation models are used.
  * Walking is marked as Free (₹0) along real road distance.
  * Auto and Cab provide realistic urban variance ranges.
  * Bus / Metro is marked as unavailable since genuine transit schedule feeds are not yet connected.
  */
 export function estimateTransportModes(distanceKm: number, roadDurationMin?: number): RouteLeg['modeEstimates'] {
   const details = computeTransportTimeDetails(distanceKm, roadDurationMin, !!roadDurationMin);
+  const fares = computeFareEstimates(distanceKm);
 
   return {
     walk: {
       timeMin: details.walk.travelTimeMin || 1,
       costInr: 0,
       label: 'Walking',
-      fareDisplay: 'Free (₹0)',
+      fareDisplay: fares.walk.fareDisplay,
       distanceKm: details.walk.distanceKm || distanceKm,
       statusLabel: details.walk.statusLabel,
     },
     auto: {
       timeMin: details.auto.travelTimeMin || 5,
-      costInr: 0,
-      costRange: 'Coming next',
+      costInr: Math.round((fares.auto.minFareInr + fares.auto.maxFareInr) / 2),
+      costRange: fares.auto.fareDisplay,
       label: 'Auto Rickshaw',
-      fareDisplay: 'Coming next',
+      fareDisplay: fares.auto.fareDisplay,
       distanceKm: details.auto.distanceKm || distanceKm,
       timeDisplay: details.auto.travelTimeDisplay,
       statusLabel: details.auto.statusLabel,
     },
     cab: {
       timeMin: details.cab.travelTimeMin || 5,
-      costInr: 0,
-      costRange: 'Coming next',
+      costInr: Math.round((fares.cab.minFareInr + fares.cab.maxFareInr) / 2),
+      costRange: fares.cab.fareDisplay,
       label: 'Cab (Ola/Uber)',
-      fareDisplay: 'Coming next',
+      fareDisplay: fares.cab.fareDisplay,
       distanceKm: details.cab.distanceKm || distanceKm,
       timeDisplay: details.cab.travelTimeDisplay,
       statusLabel: details.cab.statusLabel,
@@ -112,9 +118,9 @@ export function estimateTransportModes(distanceKm: number, roadDurationMin?: num
     bus: {
       timeMin: 0,
       costInr: 0,
-      costRange: 'Unavailable',
+      costRange: fares.bus.fareDisplay,
       label: 'Bus / Metro',
-      fareDisplay: 'Unavailable',
+      fareDisplay: fares.bus.fareDisplay,
       distanceKm: undefined,
       timeDisplay: 'Unavailable',
       statusLabel: 'Not available',
@@ -163,7 +169,6 @@ export function calculateTripRoute(
   let totalDistanceKm = 0;
   let totalTravelTimeMin = 0;
   let totalVisitTimeMin = 0;
-  let totalTransportCostInr = 0;
 
   stops.forEach((stop, index) => {
     const legDistance = calculateHaversineDistanceKm(currentLat, currentLon, stop.lat, stop.lon);
@@ -189,6 +194,8 @@ export function calculateTripRoute(
         break;
     }
 
+    const legFares = buildLegFareComparison(currentName, stop.name, legDistance);
+
     legs.push({
       legIndex: index,
       fromName: currentName,
@@ -200,6 +207,7 @@ export function calculateTripRoute(
       distanceKm: legDistance,
       estimatedTravelTimeMin: legTravelTime,
       transportComparison: transportComp,
+      fareComparison: legFares,
       modeEstimates: modeEst,
     });
 
@@ -222,6 +230,13 @@ export function calculateTripRoute(
     selectedModeTimeDisplay = `${totalTravelTimeMin} min`;
   }
 
+  // Multi-stop sum of per-leg fare estimates
+  const fareSummary = computeTripFareSummary(
+    legs.map((l) => ({ fromName: l.fromName, toName: l.toName, distanceKm: l.distanceKm })),
+    preferredMode
+  );
+  const totalEstimatedTransportCostInr = Math.round((fareSummary.totalMinFareInr + fareSummary.totalMaxFareInr) / 2);
+
   return {
     origin,
     stops,
@@ -231,10 +246,12 @@ export function calculateTripRoute(
     totalVisitTimeMin,
     totalEstimatedDurationMin: totalTravelTimeMin + totalVisitTimeMin,
     preferredMode,
-    totalEstimatedTransportCostInr: totalTransportCostInr,
+    totalEstimatedTransportCostInr,
     isOptimized,
     distanceSavedKm: Math.round(distanceSavedKm * 10) / 10,
     selectedModeTimeDisplay,
+    fareSummary,
+    selectedModeFareDisplay: fareSummary.totalFareDisplay,
   };
 }
 

@@ -12,6 +12,10 @@ import {
   buildRouteTransportComparison,
   getRepresentativeTravelTimeMin
 } from '../services/transportTimeService';
+import {
+  computeTripFareSummary,
+  buildLegFareComparison
+} from '../services/fareEstimationService';
 
 interface TripContextType {
   tripPlaces: Place[];
@@ -159,6 +163,7 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             roadGeometry.routingSource || 'osrm'
           );
           const repTime = getRepresentativeTravelTimeMin(preferredMode, comp.modes);
+          const legFares = buildLegFareComparison(leg.fromName, leg.toName, roadLeg.distanceKm);
 
           return {
             ...leg,
@@ -167,31 +172,32 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             isRoadNetwork: true,
             maneuvers: roadLeg.maneuvers,
             transportComparison: comp,
+            fareComparison: legFares,
             modeEstimates: {
               walk: {
                 timeMin: comp.modes.walk.travelTimeMin || 1,
                 costInr: 0,
                 label: 'Walking',
-                fareDisplay: 'Free (₹0)',
+                fareDisplay: comp.fares?.walk.fareDisplay || 'Free',
                 distanceKm: roadLeg.distanceKm,
                 statusLabel: comp.modes.walk.statusLabel,
               },
               auto: {
                 timeMin: comp.modes.auto.travelTimeMin || 5,
-                costInr: 0,
-                costRange: 'Coming next',
+                costInr: comp.fares ? Math.round((comp.fares.auto.minFareInr + comp.fares.auto.maxFareInr) / 2) : 0,
+                costRange: comp.fares?.auto.fareDisplay || 'Estimated',
                 label: 'Auto Rickshaw',
-                fareDisplay: 'Coming next',
+                fareDisplay: comp.fares?.auto.fareDisplay || 'Estimated',
                 distanceKm: roadLeg.distanceKm,
                 timeDisplay: comp.modes.auto.travelTimeDisplay,
                 statusLabel: comp.modes.auto.statusLabel,
               },
               cab: {
                 timeMin: comp.modes.cab.travelTimeMin || 5,
-                costInr: 0,
-                costRange: 'Coming next',
+                costInr: comp.fares ? Math.round((comp.fares.cab.minFareInr + comp.fares.cab.maxFareInr) / 2) : 0,
+                costRange: comp.fares?.cab.fareDisplay || 'Estimated',
                 label: 'Cab (Ola/Uber)',
-                fareDisplay: 'Coming next',
+                fareDisplay: comp.fares?.cab.fareDisplay || 'Estimated',
                 distanceKm: roadLeg.distanceKm,
                 timeDisplay: comp.modes.cab.travelTimeDisplay,
                 statusLabel: comp.modes.cab.statusLabel,
@@ -199,9 +205,9 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               bus: {
                 timeMin: 0,
                 costInr: 0,
-                costRange: 'Unavailable',
+                costRange: comp.fares?.bus.fareDisplay || 'Unavailable',
                 label: 'Bus / Metro',
-                fareDisplay: 'Unavailable',
+                fareDisplay: comp.fares?.bus.fareDisplay || 'Unavailable',
                 distanceKm: undefined,
                 timeDisplay: 'Unavailable',
                 statusLabel: 'Not available',
@@ -224,6 +230,13 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         selectedModeTimeDisplay = `${totalTravelTime} min`;
       }
 
+      // Multi-stop sum of per-leg fare estimates
+      const fareSummary = computeTripFareSummary(
+        enhancedLegs.map((l) => ({ fromName: l.fromName, toName: l.toName, distanceKm: l.distanceKm })),
+        preferredMode
+      );
+      const totalEstimatedTransportCostInr = Math.round((fareSummary.totalMinFareInr + fareSummary.totalMaxFareInr) / 2);
+
       return {
         ...base,
         totalDistanceKm: roadGeometry.totalDistanceKm ?? base.totalDistanceKm,
@@ -234,6 +247,9 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isRoadNetwork: roadGeometry.isRoadNetwork,
         routingSource: roadGeometry.routingSource,
         selectedModeTimeDisplay,
+        fareSummary,
+        selectedModeFareDisplay: fareSummary.totalFareDisplay,
+        totalEstimatedTransportCostInr,
       };
     }
 

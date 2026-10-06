@@ -336,9 +336,10 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
                   <Footprints className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span className="text-xs font-bold">Walking</span>
                 </div>
-                <div className="mt-2">
+                <div className="mt-2 space-y-1">
                   <span className="text-sm font-black text-slate-900 block">{routeOptions.walk.timeMin} min</span>
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                  <span className="text-[11px] font-bold text-emerald-700 block">Free (₹0)</span>
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 inline-block">
                     Road route
                   </span>
                 </div>
@@ -350,11 +351,14 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
                   <span className="text-sm">🛺</span>
                   <span className="text-xs font-bold">Auto</span>
                 </div>
-                <div className="mt-2">
+                <div className="mt-2 space-y-1">
                   <span className="text-sm font-black text-slate-900 block">
                     {routeOptions.auto.timeDisplay || `${routeOptions.auto.timeMin} min`}
                   </span>
-                  <span className="text-[10px] font-bold text-amber-900 bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-200">
+                  <span className="text-[11px] font-bold text-slate-800 block truncate" title={routeOptions.auto.fareDisplay}>
+                    {routeOptions.auto.fareDisplay || 'Estimated'}
+                  </span>
+                  <span className="text-[10px] font-bold text-amber-900 bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-200 inline-block">
                     Estimated
                   </span>
                 </div>
@@ -366,11 +370,14 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
                   <Car className="w-4 h-4 text-indigo-600 shrink-0" />
                   <span className="text-xs font-bold">Cab</span>
                 </div>
-                <div className="mt-2">
+                <div className="mt-2 space-y-1">
                   <span className="text-sm font-black text-slate-900 block">
                     {routeOptions.cab.timeDisplay || `${routeOptions.cab.timeMin} min`}
                   </span>
-                  <span className="text-[10px] font-bold text-indigo-900 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                  <span className="text-[11px] font-bold text-slate-800 block truncate" title={routeOptions.cab.fareDisplay}>
+                    {routeOptions.cab.fareDisplay || 'Estimated'}
+                  </span>
+                  <span className="text-[10px] font-bold text-indigo-900 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 inline-block">
                     Estimated
                   </span>
                 </div>
@@ -382,9 +389,10 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
                   <Bus className="w-4 h-4 text-slate-500 shrink-0" />
                   <span className="text-xs font-bold">Bus / Metro</span>
                 </div>
-                <div className="mt-2">
+                <div className="mt-2 space-y-1">
                   <span className="text-sm font-black text-slate-400 italic block">Unavailable</span>
-                  <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                  <span className="text-[11px] font-medium text-slate-400 italic block">Unavailable</span>
+                  <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 inline-block">
                     Not available
                   </span>
                 </div>
@@ -392,7 +400,7 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
             </div>
 
             <p className="text-[10px] text-slate-400">
-              Transparent travel-time estimates from your {location.isManual ? 'selected hub' : 'active GPS location'}. Fare estimation coming in Phase 9.3.
+              Transparent travel-time and fare estimates from your {location.isManual ? 'selected hub' : 'active GPS location'}. Auto &amp; Cab fares are distance-based approximations (not live booking quotes).
             </p>
           </div>
 
