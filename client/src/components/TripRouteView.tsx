@@ -4,7 +4,6 @@ import {
   Sparkles, 
   MapPin, 
   ArrowDown, 
-  Clock, 
   Trash2, 
   ChevronUp, 
   ChevronDown, 
@@ -19,7 +18,8 @@ import {
   ExternalLink,
   AlertTriangle,
   Wallet,
-  Compass
+  Compass,
+  XCircle
 } from 'lucide-react';
 import { useTrip } from '../context/TripContext';
 import { usePreferences } from '../context/PreferencesContext';
@@ -27,6 +27,11 @@ import { Place, TransportMode } from '../types/travel';
 import { formatDistanceKm } from '../services/routingService';
 import { TransportComparisonCard } from './TransportComparisonCard';
 import { recommendTripTransport } from '../services/transportRecommendationService';
+import {
+  calculateItinerarySchedule,
+  calculateItineraryFeasibility,
+  generateItineraryExplanation,
+} from '../services/itineraryEngineService';
 
 interface TripRouteViewProps {
   onViewPlaceDetails: (place: Place) => void;
@@ -89,16 +94,35 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
     );
   }
 
+  // Phase 10: Centralized Smart Itinerary Engine calculations
+  const schedule = React.useMemo(() => {
+    if (tripRoute.schedule) return tripRoute.schedule;
+    return calculateItinerarySchedule(tripPlaces, tripRoute.legs, '09:00', preferences.pace);
+  }, [tripRoute.schedule, tripPlaces, tripRoute.legs, preferences.pace]);
+
+  const feasibility = React.useMemo(() => {
+    if (tripRoute.feasibility) return tripRoute.feasibility;
+    return calculateItineraryFeasibility(schedule, preferences, preferredMode, tripPlaces);
+  }, [tripRoute.feasibility, schedule, preferences, preferredMode, tripPlaces]);
+
+  const itineraryExplanation = React.useMemo(() => {
+    if (tripRoute.itineraryExplanation) return tripRoute.itineraryExplanation;
+    return generateItineraryExplanation(
+      tripRoute.origin,
+      tripPlaces,
+      tripRoute.legs,
+      preferences,
+      preferredMode,
+      feasibility,
+      distanceSavedKm
+    );
+  }, [tripRoute.itineraryExplanation, tripRoute.origin, tripPlaces, tripRoute.legs, preferences, preferredMode, feasibility, distanceSavedKm]);
+
   // Duration calculations
-  const totalMin = tripRoute.totalEstimatedDurationMin;
+  const totalMin = feasibility.totalTripMinutes;
   const hours = Math.floor(totalMin / 60);
   const minutes = totalMin % 60;
   const formattedTotalTime = hours > 0 ? `${hours}h ${minutes > 0 ? `${minutes}m` : ''}` : `${minutes} min`;
-
-  // Time Feasibility Check vs User Available Hours
-  const availableMinutes = preferences.availableHours * 60;
-  const isOverTime = totalMin > availableMinutes;
-  const timeDifferenceMin = Math.abs(totalMin - availableMinutes);
 
   // Google Maps Multi-Stop URL construction
   const lastPlace = tripPlaces[tripPlaces.length - 1];
@@ -123,7 +147,7 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
           <div>
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[11px] font-extrabold tracking-wide uppercase">
-                Phase 8 Multi-Stop Itinerary
+                Phase 10 Smart Itinerary
               </span>
               {tripRoute.isRoadNetwork ? (
                 <span className="px-2 py-0.5 rounded-full bg-sky-600 text-white text-[10px] font-extrabold flex items-center space-x-1 shadow-xs">
@@ -296,28 +320,117 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
           </div>
         </div>
 
-        {/* Time Feasibility Comparison Alert */}
-        {isOverTime ? (
-          <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-950 flex items-start space-x-3">
-            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-extrabold text-amber-900 block text-sm">Schedule Exceeded ({timeDifferenceMin} min over)</span>
-              <p className="mt-0.5 leading-relaxed text-amber-800">
-                This {tripPlaces.length}-stop itinerary takes ~<strong>{formattedTotalTime}</strong> ({tripRoute.totalTravelTimeMin}m transit + {tripRoute.totalVisitTimeMin}m sightseeing), which exceeds your planned <strong>{preferences.availableHours}h schedule</strong>. Consider using the route optimizer or removing a destination.
-              </p>
+        {/* Phase 10: Smart Schedule Feasibility Panel */}
+        <div className={`p-5 sm:p-6 rounded-3xl border transition-all ${
+          feasibility.status === 'feasible'
+            ? 'bg-emerald-50/70 border-emerald-200'
+            : feasibility.status === 'tight'
+            ? 'bg-amber-50/70 border-amber-200'
+            : 'bg-rose-50/70 border-rose-200'
+        }`}>
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+            <div className="flex items-start space-x-3.5">
+              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
+                feasibility.status === 'feasible'
+                  ? 'bg-emerald-600 text-white'
+                  : feasibility.status === 'tight'
+                  ? 'bg-amber-600 text-white'
+                  : 'bg-rose-600 text-white'
+              }`}>
+                {feasibility.status === 'feasible' ? (
+                  <CheckCircle2 className="w-6 h-6" />
+                ) : feasibility.status === 'tight' ? (
+                  <AlertTriangle className="w-6 h-6" />
+                ) : (
+                  <XCircle className="w-6 h-6" />
+                )}
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                    feasibility.status === 'feasible'
+                      ? 'bg-emerald-200/80 text-emerald-900'
+                      : feasibility.status === 'tight'
+                      ? 'bg-amber-200/80 text-amber-900'
+                      : 'bg-rose-200/80 text-rose-900'
+                  }`}>
+                    {feasibility.statusLabel}
+                  </span>
+                  <span className="text-xs font-bold text-slate-500">
+                    {preferences.availableHours}h Planned Window
+                  </span>
+                </div>
+                <h4 className="text-base sm:text-lg font-extrabold text-slate-900 mt-1">
+                  {feasibility.headline}
+                </h4>
+                <p className="text-xs text-slate-700 mt-1 leading-relaxed">
+                  {feasibility.explanation}
+                </p>
+              </div>
             </div>
           </div>
-        ) : (
-          <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950 flex items-start space-x-3">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-extrabold text-emerald-900 block text-sm">Schedule Feasible ({timeDifferenceMin} min buffer)</span>
-              <p className="mt-0.5 leading-relaxed text-emerald-800">
-                This itinerary comfortably fits your <strong>{preferences.availableHours}h schedule</strong> with <strong>{timeDifferenceMin} min</strong> of free buffer time for Irani chai, photography, and local meals.
-              </p>
+
+          {/* Time budget breakdown row */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-4 mt-4 border-t border-slate-200/60 text-xs">
+            <div className="p-2.5 bg-white/80 rounded-xl border border-slate-200/70">
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">Transit Time</span>
+              <span className="text-sm font-black text-slate-900">{feasibility.totalTravelMinutes} min</span>
+              <span className="text-[10px] text-slate-500 block">via {preferredMode.toUpperCase()}</span>
+            </div>
+            <div className="p-2.5 bg-white/80 rounded-xl border border-slate-200/70">
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">Sightseeing Visits</span>
+              <span className="text-sm font-black text-slate-900">
+                {Math.floor(feasibility.totalVisitMinutes / 60) > 0 ? `${Math.floor(feasibility.totalVisitMinutes / 60)}h ` : ''}
+                {feasibility.totalVisitMinutes % 60}m
+              </span>
+              <span className="text-[10px] text-slate-500 block">{tripPlaces.length} stops</span>
+            </div>
+            <div className="p-2.5 bg-white/80 rounded-xl border border-slate-200/70">
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">Buffer Margin</span>
+              <span className="text-sm font-black text-slate-900">{feasibility.bufferMinutes} min</span>
+              <span className="text-[10px] text-slate-500 block">{preferences.pace} pace</span>
+            </div>
+            <div className="p-2.5 bg-white/80 rounded-xl border border-slate-200/70">
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">Total Trip Time</span>
+              <span className="text-sm font-black text-slate-900">
+                {Math.floor(feasibility.totalTripMinutes / 60)}h {feasibility.totalTripMinutes % 60}m
+              </span>
+              <span className="text-[10px] text-slate-500 block">Door-to-door</span>
+            </div>
+            <div className="p-2.5 bg-white/80 rounded-xl border border-slate-200/70 col-span-2 sm:col-span-1">
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">Schedule Margin</span>
+              <span className={`text-sm font-black ${
+                feasibility.status === 'feasible'
+                  ? 'text-emerald-700'
+                  : feasibility.status === 'tight'
+                  ? 'text-amber-700'
+                  : 'text-rose-700'
+              }`}>
+                {feasibility.status === 'exceeded'
+                  ? `+${feasibility.exceededMinutes}m Over`
+                  : `${feasibility.remainingMinutes}m Spare`}
+              </span>
+              <span className="text-[10px] text-slate-500 block">vs {preferences.availableHours}h</span>
             </div>
           </div>
-        )}
+
+          {/* Actionable Engine Guidance */}
+          {feasibility.suggestions.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-slate-200/60 text-xs space-y-1.5">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
+                Itinerary Engine Guidance:
+              </span>
+              {feasibility.suggestions.map((sug, idx) => (
+                <div key={idx} className="flex items-start space-x-1.5 text-slate-700">
+                  <span className={`font-bold shrink-0 ${
+                    feasibility.status === 'feasible' ? 'text-emerald-600' : feasibility.status === 'tight' ? 'text-amber-600' : 'text-rose-600'
+                  }`}>•</span>
+                  <span className="leading-snug">{sug}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Route Optimization Card */}
         <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${
@@ -339,15 +452,15 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
                 <p className="text-xs text-slate-600 mt-0.5">
                   {isOptimized ? (
                     <>
-                      Stops ordered via nearest-neighbor algorithm. 
+                      Stops ordered via multi-factor itinerary engine.
                       {distanceSavedKm > 0 && (
                         <strong className="text-emerald-700 ml-1">
-                          Saved ~{distanceSavedKm} km of zig-zag travel!
+                          Saved ~{distanceSavedKm} km of zig-zag backtracking!
                         </strong>
                       )}
                     </>
                   ) : (
-                    'Re-order stops using the nearest-neighbor algorithm to eliminate backtracking between sights.'
+                    'Re-order stops to eliminate backtracking while prioritizing top interests and opening schedules.'
                   )}
                 </p>
               </div>
@@ -369,9 +482,74 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
                   className="px-4 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span>⚡ Optimize Route Order</span>
+                  <span>⚡ Optimize My Trip</span>
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+
+        {/* Phase 10: "Why this order?" Itinerary Rationale Card */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div className="flex items-center space-x-2">
+              <span className="w-6 h-6 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-xs">
+                💡
+              </span>
+              <div>
+                <h4 className="text-sm font-extrabold text-slate-900">
+                  Why this order?
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  Deterministic explanation derived from geographic coordinates, visit times, and your preferences.
+                </p>
+              </div>
+            </div>
+            {isOptimized ? (
+              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-md">
+                Optimized Order Active
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-md">
+                Custom Added Order
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-2 text-xs text-slate-700">
+            <div className="p-2.5 bg-sky-50/60 rounded-xl border border-sky-100 text-slate-800 font-medium">
+              📍 <strong>Overall Flow:</strong> {itineraryExplanation.overallReason}
+            </div>
+
+            {itineraryExplanation.efficiencyReason && (
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-start space-x-2">
+                <span className="text-sky-600 font-bold shrink-0">🛣️</span>
+                <span>{itineraryExplanation.efficiencyReason}</span>
+              </div>
+            )}
+
+            {itineraryExplanation.transportReason && (
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-start space-x-2">
+                <span className="text-amber-600 font-bold shrink-0">🛺</span>
+                <span>{itineraryExplanation.transportReason}</span>
+              </div>
+            )}
+
+            <div className="space-y-1.5 pt-1">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                Stop-by-Stop Rationale:
+              </span>
+              {itineraryExplanation.stopReasons.map((sr) => (
+                <div key={sr.placeId} className="p-2.5 bg-slate-50/80 rounded-xl border border-slate-200/80 flex items-start space-x-2">
+                  <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-800 text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">
+                    {sr.stopIndex + 1}
+                  </span>
+                  <div className="flex-1">
+                    <span className="font-extrabold text-slate-900 mr-1.5">{sr.placeName}:</span>
+                    <span className="text-slate-600 leading-relaxed">{sr.reason}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -751,8 +929,13 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
 
           <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <span className="text-[10px] font-bold text-sky-700 uppercase tracking-wider">Departure Point</span>
-              <h4 className="text-sm font-extrabold text-slate-900">{tripRoute.origin.label}</h4>
+              <div className="flex items-center space-x-2">
+                <span className="px-2 py-0.5 rounded-md bg-sky-600 text-white text-[10px] font-black tracking-wide">
+                  {schedule.originDepartureStr} START
+                </span>
+                <span className="text-[10px] font-bold text-sky-700 uppercase tracking-wider">Departure Point</span>
+              </div>
+              <h4 className="text-sm font-extrabold text-slate-900 mt-1">{tripRoute.origin.label}</h4>
               <p className="text-xs text-slate-500">
                 Coordinates: {tripRoute.origin.lat.toFixed(4)}° N, {tripRoute.origin.lon.toFixed(4)}° E
               </p>
@@ -769,6 +952,8 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
           const isFirst = index === 0;
           const isLast = index === tripPlaces.length - 1;
           const isExpanded = expandedLegIndex === index;
+          const stopSched = schedule.stops[index];
+          const prevDeparture = index === 0 ? schedule.originDepartureStr : schedule.stops[index - 1]?.departureTimeStr || '09:00';
 
           return (
             <React.Fragment key={place.id}>
@@ -780,10 +965,13 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
 
                   <div className="bg-sky-50/70 border border-sky-100 rounded-2xl p-3 sm:p-4 my-2 text-xs space-y-2.5">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div className="flex items-center space-x-2 text-sky-950">
+                      <div className="flex flex-wrap items-center gap-1.5 text-sky-950">
                         <ArrowDown className="w-4 h-4 text-sky-600 shrink-0" />
+                        <span className="px-1.5 py-0.5 bg-sky-200/80 rounded text-[10px] font-black text-sky-900">
+                          Depart {prevDeparture}
+                        </span>
                         <span className="font-extrabold">Leg {index + 1}:</span>
-                        <span>{leg.fromName} → {leg.toName}</span>
+                        <span className="truncate max-w-[130px] sm:max-w-none">{leg.fromName} → {leg.toName}</span>
                         <span className="font-black text-sky-700 bg-sky-100 px-2 py-0.5 rounded-md">
                           {formatDistanceKm(leg.distanceKm)}
                         </span>
@@ -795,7 +983,7 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
                       </div>
 
                       <div className="flex items-center space-x-2">
-                        <span className="text-[11px] font-bold text-slate-600">
+                        <span className="text-[11px] font-bold text-slate-700">
                           {leg.estimatedTravelTimeMin}m via {preferredMode.toUpperCase()}
                           {preferredMode === 'walk' ? ' · Free' : preferredMode === 'bus' ? '' : ` · ${leg.modeEstimates[preferredMode]?.fareDisplay || ''}`}
                         </span>
@@ -940,8 +1128,8 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
                       alt={place.name}
                       className="w-16 h-16 rounded-xl object-cover shrink-0 border border-slate-200 shadow-2xs"
                     />
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-2">
+                    <div className="space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                           Stop {index + 1}
                         </span>
@@ -953,20 +1141,54 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
                             {place.matchScore}% Match
                           </span>
                         )}
+                        {/* Opening Hours Badge (Data Honesty) */}
+                        {stopSched && (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                            stopSched.openStatus === 'open'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : stopSched.openStatus === 'closed'
+                              ? 'bg-rose-100 text-rose-800'
+                              : 'bg-slate-100 text-slate-600'
+                          }`} title={stopSched.openStatusDetail || stopSched.openStatusLabel}>
+                            {stopSched.openStatus === 'open' ? '🟢 ' : stopSched.openStatus === 'closed' ? '🔴 ' : '⚪ '}
+                            {stopSched.openStatusLabel}
+                          </span>
+                        )}
                       </div>
+
                       <h4 className="text-base font-extrabold text-slate-900 leading-snug">
                         {place.name}
                       </h4>
+
+                      {/* Schedule Clock Pill: Arrival -> Visit -> Departure */}
+                      {stopSched && (
+                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs font-semibold text-slate-700 pt-0.5">
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 font-bold text-slate-800">
+                            🕒 Arrive: {stopSched.arrivalTimeStr}
+                          </span>
+                          <span>→</span>
+                          <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 font-bold border border-amber-200/60" title={stopSched.durationSourceLabel}>
+                            ⏳ Visit: {stopSched.visitDurationDisplay}
+                            {stopSched.isFallbackEstimate && (
+                              <span className="text-[9px] font-normal text-amber-700 ml-1">(est.)</span>
+                            )}
+                          </span>
+                          <span>→</span>
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 font-bold text-slate-800">
+                            🛫 Depart: {stopSched.departureTimeStr}
+                          </span>
+                        </div>
+                      )}
+
                       <div className="flex items-center space-x-3 text-xs text-slate-500">
-                        <span className="flex items-center space-x-1">
-                          <Clock className="w-3.5 h-3.5 text-slate-400" />
-                          <span>Visit: <strong>{place.visitDuration}</strong></span>
-                        </span>
-                        <span>•</span>
                         <span>
                           {place.rating !== undefined 
                             ? `⭐ ${place.rating} ${place.reviewCount ? `(${place.reviewCount.toLocaleString()})` : ''}` 
                             : '⭐ Unrated'}
+                        </span>
+                        <span>•</span>
+                        <span className="text-[11px] text-slate-400">
+                          {stopSched?.durationSourceLabel || 'Visit estimate'}
                         </span>
                       </div>
                     </div>
@@ -1012,6 +1234,34 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
             </React.Fragment>
           );
         })}
+
+        {/* Phase 10: Trip Complete Summary Node */}
+        {tripPlaces.length > 0 && (
+          <div className="relative pl-10 sm:pl-12 pt-2">
+            <div className="absolute left-0 top-3 w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs ring-4 ring-emerald-100 shadow-sm">
+              🏁
+            </div>
+            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <span className="font-extrabold text-slate-900 block">
+                  Trip Completed at ~{schedule.endTimeStr}
+                </span>
+                <span className="text-slate-500 text-[11px]">
+                  Total estimated door-to-door duration: {formattedTotalTime} (including {schedule.bufferMin}m buffer)
+                </span>
+              </div>
+              <span className={`px-2.5 py-1 rounded-lg font-extrabold text-[11px] self-start sm:self-auto ${
+                feasibility.status === 'feasible'
+                  ? 'bg-emerald-100 text-emerald-900'
+                  : feasibility.status === 'tight'
+                  ? 'bg-amber-100 text-amber-900'
+                  : 'bg-rose-100 text-rose-900'
+              }`}>
+                {feasibility.statusLabel}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Clear Notice / Legend */}
         <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-400">

@@ -254,6 +254,9 @@ export interface TripRoute {
   fareSummary?: TripFareSummary;
   selectedModeFareDisplay?: string;
   recommendation?: TransportRecommendationResult;
+  schedule?: ItinerarySchedule;
+  feasibility?: ItineraryFeasibility;
+  itineraryExplanation?: ItineraryExplanation;
 }
 
 export interface TransportScoreBreakdown {
@@ -302,3 +305,59 @@ export interface TransportRecommendationResult {
   };
   summaryExplanation: string;
 }
+
+export type FeasibilityStatus = 'feasible' | 'tight' | 'exceeded';
+
+export interface ItineraryStopSchedule {
+  stopIndex: number;
+  place: Place;
+  arrivalTimeStr: string;   // e.g. "09:20"
+  departureTimeStr: string; // e.g. "10:05"
+  visitDurationMin: number;
+  visitDurationDisplay: string;
+  isFallbackEstimate: boolean;
+  durationSourceLabel: string;
+  openStatus: 'open' | 'closed' | 'unavailable';
+  openStatusLabel: string;
+  openStatusDetail?: string;
+}
+
+export interface ItinerarySchedule {
+  startTimeStr: string;
+  originDepartureStr: string;
+  stops: ItineraryStopSchedule[];
+  endTimeStr: string;
+  totalTravelMin: number;
+  totalVisitMin: number;
+  bufferMin: number;
+  totalTripMin: number;
+}
+
+export interface ItineraryFeasibility {
+  status: FeasibilityStatus;
+  statusLabel: string; // "Schedule Feasible" | "Tight Schedule" | "Schedule Not Feasible"
+  statusBadgeColor: 'emerald' | 'amber' | 'rose';
+  availableMinutes: number;
+  totalTravelMinutes: number;
+  totalVisitMinutes: number;
+  bufferMinutes: number;
+  totalTripMinutes: number;
+  remainingMinutes: number; // buffer remaining (>= 0 if feasible or tight)
+  exceededMinutes: number;  // excess minutes (> 0 if exceeded)
+  headline: string;
+  explanation: string;
+  suggestions: string[];
+}
+
+export interface ItineraryExplanation {
+  overallReason: string;
+  stopReasons: {
+    stopIndex: number;
+    placeId: string;
+    placeName: string;
+    reason: string;
+  }[];
+  transportReason: string;
+  efficiencyReason: string;
+}
+

@@ -74,6 +74,13 @@ import {
   buildLegFareComparison, 
   computeTripFareSummary 
 } from './fareEstimationService';
+import {
+  calculateItinerarySchedule,
+  calculateItineraryFeasibility,
+  generateItineraryExplanation,
+  optimizeSmartItineraryOrder
+} from './itineraryEngineService';
+import { UserPreferences } from '../types/travel';
 
 /**
  * Calculates honest transit time and transport options for different travel modes.
@@ -142,9 +149,21 @@ export function calculateTripRoute(
   stops: Place[],
   isOptimized: boolean = false,
   distanceSavedKm: number = 0,
-  preferredMode: import('../types/travel').TransportMode = 'auto'
+  preferredMode: import('../types/travel').TransportMode = 'auto',
+  preferences?: UserPreferences
 ): TripRoute {
+  const prefs: UserPreferences = preferences || {
+    interests: ['history', 'temples', 'food'],
+    availableHours: 4,
+    budgetAmount: 1000,
+    travelStyle: 'solo',
+    pace: 'moderate',
+    isConfigured: false,
+  };
+
   if (stops.length === 0) {
+    const emptySchedule = calculateItinerarySchedule([], [], '09:00', prefs.pace);
+    const emptyFeasibility = calculateItineraryFeasibility(emptySchedule, prefs, preferredMode, []);
     return {
       origin,
       stops: [],
@@ -158,6 +177,8 @@ export function calculateTripRoute(
       isOptimized: false,
       distanceSavedKm: 0,
       selectedModeTimeDisplay: '0 min',
+      schedule: emptySchedule,
+      feasibility: emptyFeasibility,
     };
   }
 
@@ -167,8 +188,6 @@ export function calculateTripRoute(
   let currentName = origin.label;
 
   let totalDistanceKm = 0;
-  let totalTravelTimeMin = 0;
-  let totalVisitTimeMin = 0;
 
   stops.forEach((stop, index) => {
     const legDistance = calculateHaversineDistanceKm(currentLat, currentLon, stop.lat, stop.lon);
@@ -212,13 +231,24 @@ export function calculateTripRoute(
     });
 
     totalDistanceKm += legDistance;
-    totalTravelTimeMin += legTravelTime;
-    totalVisitTimeMin += parseVisitDurationMinutes(stop.visitDuration);
 
     currentLat = stop.lat;
     currentLon = stop.lon;
     currentName = stop.name;
   });
+
+  // Calculate schedule, feasibility, and explanation using centralized Smart Itinerary Engine
+  const schedule = calculateItinerarySchedule(stops, legs, '09:00', prefs.pace);
+  const feasibility = calculateItineraryFeasibility(schedule, prefs, preferredMode, stops);
+  const itineraryExplanation = generateItineraryExplanation(
+    origin,
+    stops,
+    legs,
+    prefs,
+    preferredMode,
+    feasibility,
+    distanceSavedKm
+  );
 
   // Selected mode user-facing time display
   let selectedModeTimeDisplay: string;
@@ -227,7 +257,7 @@ export function calculateTripRoute(
   } else if (legs.length === 1 && legs[0].transportComparison) {
     selectedModeTimeDisplay = legs[0].transportComparison.modes[preferredMode].travelTimeDisplay;
   } else {
-    selectedModeTimeDisplay = `${totalTravelTimeMin} min`;
+    selectedModeTimeDisplay = `${schedule.totalTravelMin} min`;
   }
 
   // Multi-stop sum of per-leg fare estimates
@@ -242,9 +272,9 @@ export function calculateTripRoute(
     stops,
     legs,
     totalDistanceKm: Math.round(totalDistanceKm * 10) / 10,
-    totalTravelTimeMin,
-    totalVisitTimeMin,
-    totalEstimatedDurationMin: totalTravelTimeMin + totalVisitTimeMin,
+    totalTravelTimeMin: schedule.totalTravelMin,
+    totalVisitTimeMin: schedule.totalVisitMin,
+    totalEstimatedDurationMin: schedule.totalTripMin,
     preferredMode,
     totalEstimatedTransportCostInr,
     isOptimized,
@@ -252,6 +282,9 @@ export function calculateTripRoute(
     selectedModeTimeDisplay,
     fareSummary,
     selectedModeFareDisplay: fareSummary.totalFareDisplay,
+    schedule,
+    feasibility,
+    itineraryExplanation,
   };
 }
 
@@ -267,13 +300,19 @@ export function calculateTripRoute(
  */
 export function optimizeRouteNearestNeighbor(
   origin: { lat: number; lon: number },
-  stops: Place[]
+  stops: Place[],
+  preferences?: UserPreferences,
+  preferredMode: import('../types/travel').TransportMode = 'auto'
 ): {
   orderedStops: Place[];
   distanceBeforeKm: number;
   distanceAfterKm: number;
   distanceSavedKm: number;
 } {
+  if (preferences) {
+    return optimizeSmartItineraryOrder(origin, stops, preferences, preferredMode);
+  }
+
   if (stops.length <= 1) {
     return {
       orderedStops: [...stops],

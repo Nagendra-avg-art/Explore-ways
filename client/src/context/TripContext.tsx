@@ -3,11 +3,17 @@ import { Place, TripRoute } from '../types/travel';
 import { DEMO_PLACES } from '../data/demoPlaces';
 import { useLocation } from './LocationContext';
 import { usePlaces } from './PlacesContext';
+import { usePreferences } from './PreferencesContext';
 import { 
   calculateTripRoute, 
   optimizeRouteNearestNeighbor,
   fetchRealRoadDirections
 } from '../services/routingService';
+import {
+  calculateItinerarySchedule,
+  calculateItineraryFeasibility,
+  generateItineraryExplanation
+} from '../services/itineraryEngineService';
 import {
   buildRouteTransportComparison,
   getRepresentativeTravelTimeMin
@@ -43,6 +49,7 @@ const TripContext = createContext<TripContextType | undefined>(undefined);
 export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { location } = useLocation();
   const { knownPlacesMap, registerPlace } = usePlaces();
+  const { preferences } = usePreferences();
 
   // Load initial saved place IDs from localStorage, defaulting to Charminar and Golconda
   const [manualPlaceIds, setManualPlaceIds] = useState<string[]>(() => {
@@ -148,7 +155,7 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       lon: location.lon,
       isActualGps: !location.isManual,
     };
-    const base = calculateTripRoute(origin, activeStops, isOptimized, distanceSavedKm, preferredMode);
+    const base = calculateTripRoute(origin, activeStops, isOptimized, distanceSavedKm, preferredMode, preferences);
 
     if (roadGeometry && roadGeometry.routeCoordinates && roadGeometry.routeCoordinates.length > 0) {
       const enhancedLegs = base.legs.map((leg, idx) => {
@@ -218,7 +225,18 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return leg;
       });
 
-      const totalTravelTime = enhancedLegs.reduce((acc, l) => acc + l.estimatedTravelTimeMin, 0);
+      // Recalculate schedule, feasibility, and explanation with real road network legs
+      const schedule = calculateItinerarySchedule(activeStops, enhancedLegs, '09:00', preferences.pace);
+      const feasibility = calculateItineraryFeasibility(schedule, preferences, preferredMode, activeStops);
+      const itineraryExplanation = generateItineraryExplanation(
+        origin,
+        activeStops,
+        enhancedLegs,
+        preferences,
+        preferredMode,
+        feasibility,
+        distanceSavedKm
+      );
 
       // Selected mode user-facing time display
       let selectedModeTimeDisplay: string;
@@ -227,7 +245,7 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } else if (enhancedLegs.length === 1 && enhancedLegs[0].transportComparison) {
         selectedModeTimeDisplay = enhancedLegs[0].transportComparison.modes[preferredMode].travelTimeDisplay;
       } else {
-        selectedModeTimeDisplay = `${totalTravelTime} min`;
+        selectedModeTimeDisplay = `${schedule.totalTravelMin} min`;
       }
 
       // Multi-stop sum of per-leg fare estimates
@@ -240,8 +258,9 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return {
         ...base,
         totalDistanceKm: roadGeometry.totalDistanceKm ?? base.totalDistanceKm,
-        totalTravelTimeMin: totalTravelTime,
-        totalEstimatedDurationMin: totalTravelTime + base.totalVisitTimeMin,
+        totalTravelTimeMin: schedule.totalTravelMin,
+        totalVisitTimeMin: schedule.totalVisitMin,
+        totalEstimatedDurationMin: schedule.totalTripMin,
         legs: enhancedLegs,
         routeCoordinates: roadGeometry.routeCoordinates,
         isRoadNetwork: roadGeometry.isRoadNetwork,
@@ -250,18 +269,23 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         fareSummary,
         selectedModeFareDisplay: fareSummary.totalFareDisplay,
         totalEstimatedTransportCostInr,
+        schedule,
+        feasibility,
+        itineraryExplanation,
       };
     }
 
     return base;
-  }, [location, activeStops, isOptimized, distanceSavedKm, preferredMode, roadGeometry]);
+  }, [location, activeStops, isOptimized, distanceSavedKm, preferredMode, roadGeometry, preferences]);
 
-  // Route Optimization (Nearest Neighbor)
+  // Route Optimization (Nearest Neighbor / Smart Multi-Factor)
   const optimizeTripRoute = () => {
     if (manualStops.length <= 1) return;
     const res = optimizeRouteNearestNeighbor(
       { lat: location.lat, lon: location.lon },
-      manualStops
+      manualStops,
+      preferences,
+      preferredMode
     );
     setOptimizedPlaceIds(res.orderedStops.map((p) => p.id));
     setDistanceSavedKm(res.distanceSavedKm);
@@ -287,7 +311,9 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .filter((p): p is Place => Boolean(p));
       const res = optimizeRouteNearestNeighbor(
         { lat: location.lat, lon: location.lon },
-        allUpdatedPlaces
+        allUpdatedPlaces,
+        preferences,
+        preferredMode
       );
       setOptimizedPlaceIds(res.orderedStops.map((p) => p.id));
       setDistanceSavedKm(res.distanceSavedKm);
@@ -305,7 +331,9 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         .filter((p): p is Place => Boolean(p));
       const res = optimizeRouteNearestNeighbor(
         { lat: location.lat, lon: location.lon },
-        allUpdatedPlaces
+        allUpdatedPlaces,
+        preferences,
+        preferredMode
       );
       setOptimizedPlaceIds(res.orderedStops.map((p) => p.id));
       setDistanceSavedKm(res.distanceSavedKm);
