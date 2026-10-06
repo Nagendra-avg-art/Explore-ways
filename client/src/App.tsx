@@ -1,21 +1,23 @@
 import { useState, useEffect, useMemo } from 'react';
 import { MainLayout, NavTab } from './layouts/MainLayout';
-import { CategoryPills } from './components/CategoryPills';
-import { PlaceCard } from './components/PlaceCard';
-import { PlanDayWidget } from './components/PlanDayWidget';
-import { PlaceDetailsModal } from './components/PlaceDetailsModal';
-import { LocationModal } from './components/LocationModal';
-import { PreferencesModal } from './components/PreferencesModal';
-import { ExploreView } from './components/ExploreView';
-import { MapView } from './components/MapView';
+import { 
+  CategoryPills,
+  PlaceCard,
+  PlanDayWidget,
+  PlaceDetailsModal,
+  LocationModal,
+  PreferencesModal,
+  ExploreView,
+  MapView,
+  TripRouteView,
+  AIGuideView,
+  FoodExplorerView
+} from './components';
+import { FoodProvider } from './context/FoodContext';
 import { LocationProvider, useLocation } from './context/LocationContext';
 import { PlacesProvider, usePlaces } from './context/PlacesContext';
 import { PreferencesProvider, usePreferences } from './context/PreferencesContext';
 import { TripProvider, useTrip } from './context/TripContext';
-import { TripRouteView } from './components/TripRouteView';
-import { AIGuideView } from './components/AIGuideView';
-import { FoodExplorerView } from './components/FoodExplorerView';
-import { FoodProvider } from './context/FoodContext';
 import { DEMO_PLACES } from './data/demoPlaces';
 import { CategoryId, Place } from './types/travel';
 import { scorePlace } from './services/recommendationEngine';

@@ -21,17 +21,17 @@ import {
   Compass,
   XCircle
 } from 'lucide-react';
-import { useTrip } from '../context/TripContext';
-import { usePreferences } from '../context/PreferencesContext';
-import { Place, TransportMode } from '../types/travel';
-import { formatDistanceKm } from '../services/routingService';
-import { TransportComparisonCard } from './TransportComparisonCard';
-import { recommendTripTransport } from '../services/transportRecommendationService';
+import { useTrip } from '../../context/TripContext';
+import { usePreferences } from '../../context/PreferencesContext';
+import { Place, TransportMode } from '../../types/travel';
+import { formatDistanceKm } from '../../services/routingService';
+import { TransportComparisonCard } from '../transport/TransportComparisonCard';
+import { recommendTripTransport } from '../../services/transportRecommendationService';
 import {
   calculateItinerarySchedule,
   calculateItineraryFeasibility,
   generateItineraryExplanation,
-} from '../services/itineraryEngineService';
+} from '../../services/itineraryEngineService';
 
 interface TripRouteViewProps {
   onViewPlaceDetails: (place: Place) => void;

@@ -14,18 +14,18 @@ import {
   ChevronRight,
   Info
 } from 'lucide-react';
-import { useLocation } from '../context/LocationContext';
-import { usePreferences } from '../context/PreferencesContext';
-import { useTrip } from '../context/TripContext';
-import { usePlaces } from '../context/PlacesContext';
-import { useFood } from '../context/FoodContext';
+import { useLocation } from '../../context/LocationContext';
+import { usePreferences } from '../../context/PreferencesContext';
+import { useTrip } from '../../context/TripContext';
+import { usePlaces } from '../../context/PlacesContext';
+import { useFood } from '../../context/FoodContext';
 import { 
   ChatMessage, 
   formatAIContext, 
   sendAIChatMessage, 
   fetchAIStatus, 
   AIStatusInfo 
-} from '../services/aiGuideService';
+} from '../../services/aiGuideService';
 
 const DEFAULT_SUGGESTIONS = [
   'What should I visit first?',

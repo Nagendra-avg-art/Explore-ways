@@ -1,109 +1,115 @@
 # Smart Travel Companion (AI Local Guide) 🧭
 
 > **Explore smarter. Travel better.**  
-> *An AI-powered local travel companion designed to help you discover places, optimize routes, compare transport options, and build personalized itineraries in minutes.*
+> *An intelligent, location-aware travel companion application designed to discover attractions, explore nearby dining, compare multi-modal transport, optimize multi-stop itineraries, and provide AI-grounded local guidance.*
 
 ---
 
 ## 📌 Project Overview
-When arriving in a new city or unfamiliar neighborhood, travelers often struggle to prioritize what to see, understand how to get there efficiently, calculate realistic transport fares, and structure their day to fit their available time and budget.
+When exploring a new city or unfamiliar neighborhood, travelers need quick answers:
+1. *Where can I find great sights and food nearby?*
+2. *Which transport mode (Walking, Bus/Metro, Auto Rickshaw, Cab) is best for time vs. budget?*
+3. *How do I arrange my stops so I don't run out of time?*
+4. *Can an AI assistant answer my questions without hallucinating fake places?*
 
-**Smart Travel Companion** acts as a personal local guide. It combines GPS geolocation, place discovery, interactive maps, multi-modal transport comparisons, fair fare estimation, and an AI reasoning layer grounded in verified location data.
+**Smart Travel Companion** connects GPS geolocation, OpenStreetMap place discovery, real road routing, multi-modal transport comparisons, and a grounded AI Local Guide into a clean, modern travel interface.
+
+---
+
+## 🏗️ Architecture & Project Organization
+
+```
+smart-travel-companion/
+│
+├── client/                     # Frontend Application (React 19 + TypeScript + Vite)
+│   └── src/
+│       ├── components/         # Domain-Driven Component Organization
+│       │   ├── common/         # Modals, category filters, location pickers
+│       │   ├── explore/        # Attraction discovery, place cards, detail modals
+│       │   ├── food/           # Food Explorer, cuisine filters, radius pills
+│       │   ├── map/            # Interactive Leaflet map, popups, route polyline
+│       │   ├── transport/      # Mode comparison card (walking, bus, auto, cab)
+│       │   ├── itinerary/      # Multi-stop timeline, duration/buffer calculations
+│       │   └── ai-guide/       # Conversational AI travel guide interface
+│       ├── context/            # React Context providers (Location, Trip, Food, etc.)
+│       ├── layouts/            # MainLayout (header, sidebar, mobile navigation)
+│       ├── services/           # Business logic (routing, scoring, transport, AI)
+│       └── types/              # Central TypeScript definitions (travel.ts)
+│
+├── server/                     # Backend API Server (Node.js + Express + TypeScript)
+│   └── src/
+│       ├── routes/             # Express HTTP route definitions
+│       ├── controllers/        # Lean request/response controllers
+│       ├── services/           # Discovery, caching, and AI logic
+│       ├── data/
+│       │   └── demo/           # Documented fallback datasets (Hyderabad & Dining)
+│       ├── utils/              # Pure geocoding & math helpers (Haversine formula)
+│       └── types/              # Server-side data contracts
+│
+├── tests/                      # Organized Test & Verification Suites
+│   ├── phase/                  # Phase verification test suites
+│   │   ├── phase-08/           # Location & POI discovery tests
+│   │   ├── phase-09/           # Transport & fare estimation tests
+│   │   ├── phase-10/           # Smart Itinerary engine tests
+│   │   ├── phase-11/           # Grounded AI Travel Guide tests
+│   │   └── phase-12/           # Food Explorer verification tests
+│   └── integration/            # Multi-service integration tests
+│
+├── docs/                       # Project Documentation
+│   ├── architecture/           # Overview, frontend, backend, data-flow, external services
+│   ├── api/                    # REST API endpoints reference
+│   ├── phases/                 # Phase milestone summaries (Phases 7–12)
+│   └── setup/                  # Developer setup instructions
+│
+├── .env.example
+├── package.json
+└── README.md
+```
 
 ---
 
 ## 🛠️ Tech Stack
-
-### Frontend
-- **Framework**: React 18 with Vite
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS (Custom travel palette with dark/light themes)
-- **Icons**: Lucide React
-- **Maps**: Leaflet / OpenStreetMap (Interactive, zero-cost, no credit card required)
-
-### Backend
-- **Runtime**: Node.js v22 (LTS)
-- **Framework**: Express
-- **Language**: TypeScript (executed with `tsx`)
-- **API Architecture**: REST with proxying (`/api/*`)
-- **Database / ORM**: PostgreSQL with Prisma (SQLite fallback for quick local demo)
-
-### AI & Services
-- **AI Reasoning**: Google Gemini API / Pluggable AI Service adapter
-- **Routing & Distances**: OSRM (Open Source Routing Machine) / Haversine road-distance heuristics
-- **Weather**: Open-Meteo (zero-key free tier)
+- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS, Lucide Icons, Leaflet (React Leaflet).
+- **Backend:** Node.js, Express, TypeScript (`tsx` for dev, `tsc` for production).
+- **External Providers:**
+  - OpenStreetMap Nominatim (Geocoding & Nearby POI search)
+  - OSRM Demo Server (Real road driving routes)
+  - Google Gemini API / Grounded Fallback Engine (Grounded travel guidance)
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Quick Start
 
-### Prerequisites
-- Node.js (v18+ recommended, v22 tested)
-- npm (v9+)
-
-### Installation
-1. Clone the repository:
-   ```bash
-   git clone <repo-url>
-   cd Web_Tec_project
-   ```
-2. Install all dependencies:
-   ```bash
-   npm run install:all
-   ```
-
-### Running the Project
-
-Open two terminal windows:
-
-**Terminal 1 — Backend API Server:**
+### 1. Installation
 ```bash
+npm run install:all
+```
+
+### 2. Run Locally
+```bash
+# Terminal 1: Backend API (port 5000)
 npm run dev:server
-# Server will run at http://localhost:5000
-# Health check available at http://localhost:5000/api/health
-```
 
-**Terminal 2 — Frontend Client:**
-```bash
+# Terminal 2: Frontend Client (port 5173)
 npm run dev:client
-# Client will run at http://localhost:5173
+```
+
+### 3. Run Automated Verification Tests
+```bash
+# Verify Phase 12 Food Explorer & Grounding
+node tests/phase/phase-12/test-phase12-all.mjs
+
+# Verify Deep Location & Filter Audit
+node tests/phase/phase-12/verify-phase12-deep.mjs
 ```
 
 ---
 
-## 🔐 Environment Variables
-
-Copy the example environment files:
-- Server: `server/.env.example` -> `server/.env`
-
-Key configurations:
-```env
-PORT=5000
-NODE_ENV=development
-CLIENT_URL=http://localhost:5173
-DEMO_MODE=true
-AI_PROVIDER=gemini
-GEMINI_API_KEY=
-```
-
----
-
-## 🗺️ Roadmap & Current Phase
-- [x] **Phase 1: Project Foundation** (Monorepo, Express TS, React Vite TS, Tailwind, Health check)
-- [ ] **Phase 2: UI Foundation & Layout**
-- [ ] **Phase 3: Geolocation & Reverse Geocoding**
-- [ ] **Phase 4: Interactive Map System**
-- [ ] **Phase 5: Place Discovery & Rich Cards**
-- [ ] **Phase 6: User Preferences Engine**
-- [ ] **Phase 7: Recommendation Engine**
-- [ ] **Phase 8: Distance Matrix & Multi-stop Routing**
-- [ ] **Phase 9: Transport Comparison (Walk, Auto, Cab, Bike)**
-- [ ] **Phase 10: Smart Fair Fare Assistant**
-- [ ] **Phase 11: Dynamic Itinerary Generator**
-- [ ] **Phase 12: Context-Grounded AI Assistant**
-- [ ] **Phase 13: Local Food & Cafe Explorer**
-- [ ] **Phase 14: Weather-Aware Planning**
-- [ ] **Phase 15: My Trip Saved Collections**
-- [ ] **Phase 16: Polish & Micro-animations**
-- [ ] **Phase 17: Mobile & Security Audits**
-- [ ] **Phase 18: Deployment & Production Build**
+## 📖 Detailed Documentation
+- [Architecture Overview](docs/architecture/overview.md)
+- [Frontend Architecture](docs/architecture/frontend.md)
+- [Backend Architecture](docs/architecture/backend.md)
+- [System Data Flow](docs/architecture/data-flow.md)
+- [External Services & OSM Attribution](docs/architecture/external-services.md)
+- [API Endpoints Reference](docs/api/endpoints.md)
+- [Phase Milestones (Phases 7–12)](docs/phases/phase-milestones.md)

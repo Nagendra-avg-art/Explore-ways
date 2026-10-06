@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Check, Footprints, Bus, Car, ArrowRight, Info, ShieldCheck, AlertCircle, HelpCircle, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
-import { TransportMode } from '../types/travel';
-import { computeTransportTimeDetails } from '../services/transportTimeService';
-import { usePreferences } from '../context/PreferencesContext';
-import { recommendTransportMode } from '../services/transportRecommendationService';
+import { TransportMode } from '../../types/travel';
+import { computeTransportTimeDetails } from '../../services/transportTimeService';
+import { usePreferences } from '../../context/PreferencesContext';
+import { recommendTransportMode } from '../../services/transportRecommendationService';
 
 export interface TransportComparisonCardProps {
   fromName: string;

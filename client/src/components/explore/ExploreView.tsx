@@ -9,13 +9,13 @@ import {
   Clock,
   Sparkles
 } from 'lucide-react';
-import { CategoryPills } from './CategoryPills';
+import { CategoryPills } from '../common/CategoryPills';
 import { PlaceCard } from './PlaceCard';
-import { CategoryId, Place, SortOption } from '../types/travel';
-import { useLocation } from '../context/LocationContext';
-import { usePreferences } from '../context/PreferencesContext';
-import { usePlaces } from '../context/PlacesContext';
-import { scorePlace } from '../services/recommendationEngine';
+import { CategoryId, Place, SortOption } from '../../types/travel';
+import { useLocation } from '../../context/LocationContext';
+import { usePreferences } from '../../context/PreferencesContext';
+import { usePlaces } from '../../context/PlacesContext';
+import { scorePlace } from '../../services/recommendationEngine';
 
 interface ExploreViewProps {
   onViewDetails: (place: Place) => void;

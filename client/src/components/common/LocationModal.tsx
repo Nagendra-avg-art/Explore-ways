@@ -8,8 +8,8 @@ import {
   Check, 
   Loader2 
 } from 'lucide-react';
-import { useLocation } from '../context/LocationContext';
-import { GeoLocation } from '../types/travel';
+import { useLocation } from '../../context/LocationContext';
+import { GeoLocation } from '../../types/travel';
 
 const POPULAR_CITIES: GeoLocation[] = [
   { city: 'Hyderabad', area: 'Old City / Charminar', state: 'Telangana', country: 'India', lat: 17.3616, lon: 78.4747, formatted: 'Near Charminar, Hyderabad' },

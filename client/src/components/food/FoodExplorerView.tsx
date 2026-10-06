@@ -14,10 +14,10 @@ import {
   Leaf, 
   ChevronRight
 } from 'lucide-react';
-import { useFood, FoodFilterType } from '../context/FoodContext';
-import { useLocation } from '../context/LocationContext';
-import { useTrip } from '../context/TripContext';
-import { FoodPlace } from '../types/travel';
+import { useFood, FoodFilterType } from '../../context/FoodContext';
+import { useLocation } from '../../context/LocationContext';
+import { useTrip } from '../../context/TripContext';
+import { FoodPlace } from '../../types/travel';
 
 interface FoodExplorerViewProps {
   onViewOnMap: (place: FoodPlace) => void;

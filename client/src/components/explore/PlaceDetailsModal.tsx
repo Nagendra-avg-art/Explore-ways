@@ -16,9 +16,9 @@ import {
   Bus,
   ExternalLink
 } from 'lucide-react';
-import { Place } from '../types/travel';
-import { useLocation } from '../context/LocationContext';
-import { calculateHaversineDistanceKm, estimateTransportModes, formatDistanceKm } from '../services/routingService';
+import { Place } from '../../types/travel';
+import { useLocation } from '../../context/LocationContext';
+import { calculateHaversineDistanceKm, estimateTransportModes, formatDistanceKm } from '../../services/routingService';
 
 interface PlaceDetailsModalProps {
   place: Place | null;

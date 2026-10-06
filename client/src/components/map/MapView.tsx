@@ -12,11 +12,11 @@ import {
   Sparkles,
   Route
 } from 'lucide-react';
-import { DEMO_PLACES, TRAVEL_CATEGORIES } from '../data/demoPlaces';
-import { Place, CategoryId } from '../types/travel';
-import { useLocation } from '../context/LocationContext';
-import { useTrip } from '../context/TripContext';
-import { ACTIVE_MAP_PROVIDER } from '../config/mapConfig';
+import { DEMO_PLACES, TRAVEL_CATEGORIES } from '../../data/demoPlaces';
+import { Place, CategoryId } from '../../types/travel';
+import { useLocation } from '../../context/LocationContext';
+import { useTrip } from '../../context/TripContext';
+import { ACTIVE_MAP_PROVIDER } from '../../config/mapConfig';
 
 interface MapViewProps {
   places?: Place[];

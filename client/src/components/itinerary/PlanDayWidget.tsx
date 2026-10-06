@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { Clock, IndianRupee, Sparkles, Check, ArrowRight, SlidersHorizontal } from 'lucide-react';
-import { usePreferences } from '../context/PreferencesContext';
-import { useLocation } from '../context/LocationContext';
-import { usePlaces } from '../context/PlacesContext';
-import { TimeOption, BudgetOption, CategoryId } from '../types/travel';
-import { TRAVEL_CATEGORIES, DEMO_PLACES } from '../data/demoPlaces';
-import { rankPlacesForUser } from '../services/recommendationEngine';
+import { usePreferences } from '../../context/PreferencesContext';
+import { useLocation } from '../../context/LocationContext';
+import { usePlaces } from '../../context/PlacesContext';
+import { TimeOption, BudgetOption, CategoryId } from '../../types/travel';
+import { TRAVEL_CATEGORIES, DEMO_PLACES } from '../../data/demoPlaces';
+import { rankPlacesForUser } from '../../services/recommendationEngine';
 
 interface PlanDayWidgetProps {
   onBuildPlan?: (planConfig: {

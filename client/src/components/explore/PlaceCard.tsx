@@ -1,6 +1,6 @@
 import React from 'react';
 import { MapPin, Car, Clock, Star, Heart, Sparkles, Check } from 'lucide-react';
-import { Place } from '../types/travel';
+import { Place } from '../../types/travel';
 
 interface PlaceCardProps {
   place: Place;

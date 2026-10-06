@@ -1,6 +1,6 @@
 import React from 'react';
-import { TRAVEL_CATEGORIES } from '../data/demoPlaces';
-import { CategoryId } from '../types/travel';
+import { TRAVEL_CATEGORIES } from '../../data/demoPlaces';
+import { CategoryId } from '../../types/travel';
 
 interface CategoryPillsProps {
   selectedCategory: CategoryId;

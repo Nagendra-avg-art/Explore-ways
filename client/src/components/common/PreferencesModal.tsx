@@ -11,9 +11,9 @@ import {
   MapPin,
   Star
 } from 'lucide-react';
-import { usePreferences } from '../context/PreferencesContext';
-import { TRAVEL_CATEGORIES } from '../data/demoPlaces';
-import { CategoryId, TravelPace, TravelStyle } from '../types/travel';
+import { usePreferences } from '../../context/PreferencesContext';
+import { TRAVEL_CATEGORIES } from '../../data/demoPlaces';
+import { CategoryId, TravelPace, TravelStyle } from '../../types/travel';
 
 export const PreferencesModal: React.FC = () => {
   const {
