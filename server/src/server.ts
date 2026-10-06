@@ -20,6 +20,7 @@ import locationRoutes from './routes/locationRoutes.js';
 import placesRoutes from './routes/placesRoutes.js';
 import recommendationsRoutes from './routes/recommendationsRoutes.js';
 import routesRoutes from './routes/routesRoutes.js';
+import aiRoutes from './routes/aiRoutes.js';
 
 // Basic health check endpoint
 app.get('/api/health', (req: Request, res: Response) => {
@@ -43,6 +44,9 @@ app.use('/api/recommendations', recommendationsRoutes);
 
 // Real Road Routing & Directions routes
 app.use('/api/routes', routesRoutes);
+
+// AI Local Travel Guide routes
+app.use('/api/ai', aiRoutes);
 
 // Start listening
 app.listen(PORT, () => {

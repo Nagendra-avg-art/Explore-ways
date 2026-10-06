@@ -13,6 +13,7 @@ import { PlacesProvider, usePlaces } from './context/PlacesContext';
 import { PreferencesProvider, usePreferences } from './context/PreferencesContext';
 import { TripProvider, useTrip } from './context/TripContext';
 import { TripRouteView } from './components/TripRouteView';
+import { AIGuideView } from './components/AIGuideView';
 import { DEMO_PLACES } from './data/demoPlaces';
 import { CategoryId, Place } from './types/travel';
 import { scorePlace } from './services/recommendationEngine';
@@ -24,7 +25,6 @@ import {
   Info, 
   Compass, 
   Calendar, 
-  Bot,
   Loader2,
   AlertCircle,
   SlidersHorizontal,
@@ -537,18 +537,7 @@ function MainAppContent() {
 
       {/* TAB 5: AI GUIDE */}
       {activeTab === 'ai' && (
-        <div className="bg-white rounded-3xl border border-slate-200 p-8 sm:p-12 text-center space-y-4 shadow-xs animate-fadeIn">
-          <div className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mx-auto shadow-xs">
-            <Bot className="w-7 h-7" />
-          </div>
-          <div className="max-w-md mx-auto space-y-1">
-            <span className="text-xs font-bold uppercase tracking-wider text-teal-600">Upcoming in Phase 12</span>
-            <h2 className="text-2xl font-extrabold text-slate-900">Your AI Local Travel Guide</h2>
-            <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
-              In Phase 12, we will integrate a contextual AI assistant grounded in retrieved destination data for {location.city}.
-            </p>
-          </div>
-        </div>
+        <AIGuideView />
       )}
 
       {/* TAB 6: MY TRIP ROUTE & ITINERARY */}
