@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { Check, Footprints, Bus, Car, ArrowRight, Info, ShieldCheck, AlertCircle, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Check, Footprints, Bus, Car, ArrowRight, Info, ShieldCheck, AlertCircle, HelpCircle, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { TransportMode } from '../types/travel';
 import { computeTransportTimeDetails } from '../services/transportTimeService';
+import { usePreferences } from '../context/PreferencesContext';
+import { recommendTransportMode } from '../services/transportRecommendationService';
 
 export interface TransportComparisonCardProps {
   fromName: string;
@@ -27,9 +29,24 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
   hideHeader = false,
 }) => {
   const [showAssumptions, setShowAssumptions] = useState(false);
+  const { preferences } = usePreferences();
 
   // Compute honest mode-by-mode details from our dedicated services
   const modeDetails = computeTransportTimeDetails(distanceKm, roadDrivingTimeMin, isRoadNetwork);
+
+  // Compute Phase 9.4 Smart Transport Recommendation
+  const recommendationResult = recommendTransportMode({
+    distanceKm,
+    roadDurationMin: roadDrivingTimeMin,
+    isRoadNetwork,
+    preferences,
+    travelTimes: {
+      walk: { travelTimeMin: modeDetails.walk.travelTimeMin, travelTimeDisplay: modeDetails.walk.travelTimeDisplay },
+      auto: { travelTimeMin: modeDetails.auto.travelTimeMin, travelTimeDisplay: modeDetails.auto.travelTimeDisplay },
+      cab: { travelTimeMin: modeDetails.cab.travelTimeMin, travelTimeDisplay: modeDetails.cab.travelTimeDisplay },
+      bus: { travelTimeMin: null, travelTimeDisplay: 'Unavailable' },
+    },
+  });
 
   const modeCards = [
     {
@@ -101,10 +118,111 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
         </div>
       )}
 
+      {/* Phase 9.4: Smart Transport Recommendation Banner */}
+      <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-amber-500/10 via-sky-500/5 to-white border border-amber-300/80 shadow-xs space-y-3.5 animate-fadeIn">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center space-x-2">
+            <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-black uppercase tracking-wider flex items-center space-x-1 shadow-2xs">
+              <Sparkles className="w-3 h-3 fill-white" />
+              <span>Recommended For You</span>
+            </span>
+            <span className="px-2 py-0.5 rounded-full bg-white text-slate-700 text-[10px] font-bold border border-slate-200">
+              Match Score: {recommendationResult.recommended.score}/100
+            </span>
+          </div>
+
+          {selectedMode !== recommendationResult.recommended.mode ? (
+            <button
+              type="button"
+              onClick={() => onSelectMode(recommendationResult.recommended.mode)}
+              className="text-[11px] font-extrabold text-sky-700 hover:text-sky-900 bg-sky-100 hover:bg-sky-200 px-3 py-1 rounded-xl transition-all self-start sm:self-auto cursor-pointer shadow-2xs"
+            >
+              Select {recommendationResult.recommended.modeLabel} →
+            </button>
+          ) : (
+            <span className="text-[11px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-xl self-start sm:self-auto flex items-center space-x-1">
+              <Check className="w-3 h-3 stroke-[3]" />
+              <span>Currently Active</span>
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center space-x-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white text-2xl flex items-center justify-center shrink-0 shadow-sm">
+            {recommendationResult.recommended.icon}
+          </div>
+          <div>
+            <div className="flex flex-wrap items-baseline gap-2">
+              <h4 className="text-base font-black text-slate-900">
+                {recommendationResult.recommended.modeLabel}
+              </h4>
+              <span className="text-xs font-extrabold text-amber-900 bg-amber-100/90 px-2 py-0.5 rounded-md">
+                {recommendationResult.recommended.tagline}
+              </span>
+            </div>
+            <div className="flex items-center space-x-2 text-xs text-slate-600 mt-1 font-semibold">
+              <span className="text-slate-900 font-black">{recommendationResult.recommended.travelTimeDisplay}</span>
+              <span>•</span>
+              <span className="font-black text-slate-900">
+                {recommendationResult.recommended.fareEstimate.fareDisplay}
+              </span>
+              <span>•</span>
+              <span>{distanceKm} km route</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Dynamic "Why?" Reasons */}
+        <div className="pt-2.5 border-t border-amber-200/60 space-y-1.5 text-xs">
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
+            Why this mode was recommended:
+          </span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            {recommendationResult.recommended.matchReasons.map((reason, rIdx) => (
+              <div key={rIdx} className="flex items-start space-x-1.5 text-[11px]">
+                <span className="text-emerald-600 font-bold shrink-0">✓</span>
+                <span className="leading-snug text-slate-700">{reason}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Viable Alternatives Strip */}
+        {recommendationResult.alternatives.length > 0 && (
+          <div className="pt-2 border-t border-slate-200/80 flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mr-1">
+              Alternatives:
+            </span>
+            {recommendationResult.alternatives.map((alt) => (
+              <button
+                key={alt.mode}
+                type="button"
+                onClick={() => onSelectMode(alt.mode)}
+                className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-all cursor-pointer flex items-center space-x-1.5 ${
+                  selectedMode === alt.mode
+                    ? 'bg-sky-600 text-white border-sky-600 shadow-2xs font-extrabold'
+                    : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                }`}
+              >
+                <span>{alt.icon}</span>
+                <span>{alt.modeLabel}:</span>
+                <span className={selectedMode === alt.mode ? 'text-white' : 'text-slate-500 font-medium'}>
+                  {alt.fareEstimate.fareDisplay}
+                </span>
+                <span className="text-[9px] opacity-75">
+                  ({alt.role === 'budget' ? 'Budget' : 'Alternative'})
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* 4 Transport Option Cards: Walking, Auto Rickshaw, Cab, Bus / Metro */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {modeCards.map((m) => {
           const isSelected = selectedMode === m.mode;
+          const isBest = m.mode === recommendationResult.recommended.mode;
 
           return (
             <button
@@ -114,6 +232,8 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
               className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between space-y-3 relative group ${
                 isSelected
                   ? 'border-sky-600 bg-sky-50/80 shadow-md ring-2 ring-sky-300'
+                  : isBest
+                  ? 'border-amber-300 bg-amber-50/30 hover:border-amber-400 hover:bg-amber-50/60 shadow-2xs'
                   : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70 shadow-2xs'
               }`}
             >
@@ -122,16 +242,28 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
                 <div className="flex items-center space-x-2.5">
                   <div
                     className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 shadow-2xs ${
-                      isSelected ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-800'
+                      isSelected ? 'bg-sky-600 text-white' : isBest ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-800'
                     }`}
                   >
                     {m.icon}
                   </div>
                   <div>
-                    <h4 className="text-sm font-extrabold text-slate-900 leading-tight">
-                      {m.modeLabel}
-                    </h4>
-                    <span className="text-[10px] text-slate-400 font-medium block">
+                    <div className="flex items-center space-x-1.5">
+                      <h4 className="text-sm font-extrabold text-slate-900 leading-tight">
+                        {m.modeLabel}
+                      </h4>
+                      {isBest && (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 text-[9px] font-black">
+                          ✨ Best
+                        </span>
+                      )}
+                      {m.mode === 'walk' && !isBest && (
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 text-[9px] font-black">
+                          Budget
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-medium block mt-0.5">
                       {m.mode === 'walk'
                         ? 'Pedestrian route'
                         : m.mode === 'auto'

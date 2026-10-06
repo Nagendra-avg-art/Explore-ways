@@ -253,8 +253,52 @@ export interface TripRoute {
   selectedModeTimeDisplay?: string;
   fareSummary?: TripFareSummary;
   selectedModeFareDisplay?: string;
+  recommendation?: TransportRecommendationResult;
 }
 
+export interface TransportScoreBreakdown {
+  timeScore: number;         // 0-100: how well travel time fits available schedule & pace
+  budgetScore: number;       // 0-100: how comfortably fare fits budget amount
+  distanceScore: number;     // 0-100: suitability of mode for this specific distance
+  styleScore: number;        // 0-100: alignment with solo/couple/family/friends
+  availabilityScore: number; // 0-100: data reliability & operational availability
+}
 
+export interface TransportModeRecommendation {
+  mode: TransportMode;
+  modeLabel: string;
+  icon: string;
+  score: number;             // 0-100 composite weighted score
+  tagline: string;           // e.g. "Best balance of travel time and budget"
+  matchReasons: string[];    // Data-driven bullet explanations
+  isRecommended: boolean;    // true for the highest scoring viable mode
+  role: 'recommended' | 'alternative' | 'budget' | 'unavailable';
+  scoreBreakdown: TransportScoreBreakdown;
+  fareEstimate: FareEstimate;
+  travelTimeMin: number;
+  travelTimeDisplay: string;
+  distanceKm: number;
+}
 
-
+export interface TransportRecommendationResult {
+  recommended: TransportModeRecommendation;
+  alternatives: TransportModeRecommendation[]; // Viable available alternatives
+  unavailableModes: TransportModeRecommendation[];
+  allRanked: TransportModeRecommendation[];
+  budgetImpact: {
+    tripBudgetInr: number;
+    estimatedFareMinInr: number;
+    estimatedFareMaxInr: number;
+    remainingBudgetMinInr: number;
+    remainingBudgetMaxInr: number;
+    percentOfBudget: number;
+  };
+  timeImpact: {
+    availableHours: number;
+    availableMinutes: number;
+    transitTimeMinutes: number;
+    remainingTimeMinutes: number;
+    timeSavingsVsWalkMin?: number;
+  };
+  summaryExplanation: string;
+}
