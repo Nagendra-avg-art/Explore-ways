@@ -14,6 +14,8 @@ import { PreferencesProvider, usePreferences } from './context/PreferencesContex
 import { TripProvider, useTrip } from './context/TripContext';
 import { TripRouteView } from './components/TripRouteView';
 import { AIGuideView } from './components/AIGuideView';
+import { FoodExplorerView } from './components/FoodExplorerView';
+import { FoodProvider } from './context/FoodContext';
 import { DEMO_PLACES } from './data/demoPlaces';
 import { CategoryId, Place } from './types/travel';
 import { scorePlace } from './services/recommendationEngine';
@@ -74,11 +76,18 @@ function MainAppContent() {
     totalFound,
     discoverNearbyPlaces,
     useDemoFallback,
-    knownPlacesMap
+    knownPlacesMap,
+    registerPlace
   } = usePlaces();
 
-  // Active candidate places (Live OSM or Demo Fallback)
-  const availablePlaces = discoveredPlaces.length > 0 ? discoveredPlaces : DEMO_PLACES;
+  // Active candidate places (Live OSM or Demo Fallback, including any viewed food POIs)
+  const availablePlaces = useMemo(() => {
+    const base = discoveredPlaces.length > 0 ? discoveredPlaces : DEMO_PLACES;
+    const map = new Map<string, Place>();
+    base.forEach(p => map.set(p.id, p));
+    Object.values(knownPlacesMap).forEach(p => map.set(p.id, p));
+    return Array.from(map.values());
+  }, [discoveredPlaces, knownPlacesMap]);
 
   // Discovery state
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
@@ -494,6 +503,18 @@ function MainAppContent() {
         />
       )}
 
+      {/* TAB 2.5: FOOD EXPLORER VIEW */}
+      {activeTab === 'food' && (
+        <FoodExplorerView
+          onViewOnMap={(foodPlace) => {
+            registerPlace(foodPlace);
+            setSelectedPlaceForMapId(foodPlace.id);
+            setActiveTab('map');
+          }}
+          onViewDetails={(foodPlace) => setSelectedPlaceForModal(foodPlace)}
+        />
+      )}
+
       {/* TAB 3: MAP VIEW (INTERACTIVE MAP) */}
       {activeTab === 'map' && (
         <MapView
@@ -581,7 +602,9 @@ export default function App() {
       <PlacesProvider>
         <PreferencesProvider>
           <TripProvider>
-            <MainAppContent />
+            <FoodProvider>
+              <MainAppContent />
+            </FoodProvider>
           </TripProvider>
         </PreferencesProvider>
       </PlacesProvider>

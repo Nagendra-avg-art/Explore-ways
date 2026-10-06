@@ -18,6 +18,7 @@ import { useLocation } from '../context/LocationContext';
 import { usePreferences } from '../context/PreferencesContext';
 import { useTrip } from '../context/TripContext';
 import { usePlaces } from '../context/PlacesContext';
+import { useFood } from '../context/FoodContext';
 import { 
   ChatMessage, 
   formatAIContext, 
@@ -29,6 +30,8 @@ import {
 const DEFAULT_SUGGESTIONS = [
   'What should I visit first?',
   'Why is this recommended?',
+  'What should I eat nearby?',
+  'Where can I get vegetarian food?',
   'Can I fit another place?',
   "What's the cheapest option?",
   'Summarize my itinerary.'
@@ -39,6 +42,7 @@ export const AIGuideView: React.FC = () => {
   const { preferences } = usePreferences();
   const { tripRoute } = useTrip();
   const { places: discoveredPlaces } = usePlaces();
+  const { foodPlaces } = useFood();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState<string>('');
@@ -62,7 +66,7 @@ export const AIGuideView: React.FC = () => {
       const welcomeContent = stopCount > 0
         ? `Hello! I'm your **Local Travel Guide** for **${city}**.\n\n` +
           `[APPLICATION DATA] You currently have **${stopCount} stop(s)** scheduled in your trip (` +
-          tripRoute.stops.map(s => s.name).join(', ') + 
+          tripRoute.stops.map((s: { name: string }) => s.name).join(', ') + 
           `). I have your complete route, transport options, fares, and timeline loaded.\n\n` +
           `How can I help with your trip today?`
         : `Hello! I'm your **Local Travel Guide** for **${city}**.\n\n` +
@@ -107,7 +111,8 @@ export const AIGuideView: React.FC = () => {
         location,
         preferences,
         tripRoute,
-        discoveredPlaces
+        discoveredPlaces,
+        foodPlaces
       );
 
       const response = await sendAIChatMessage(

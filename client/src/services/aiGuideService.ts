@@ -1,4 +1,4 @@
-import { GeoLocation, Place, TripRoute, UserPreferences } from '../types/travel';
+import { GeoLocation, Place, TripRoute, UserPreferences, FoodPlace } from '../types/travel';
 
 export interface ChatMessage {
   id: string;
@@ -34,7 +34,8 @@ export function formatAIContext(
   location: GeoLocation,
   preferences: UserPreferences,
   tripRoute: TripRoute,
-  discoveredPlaces: Place[] = []
+  discoveredPlaces: Place[] = [],
+  nearbyFoodPlaces: FoodPlace[] = []
 ) {
   const stops = tripRoute.stops || [];
   
@@ -103,6 +104,22 @@ export function formatAIContext(
       distanceSavedKm: tripRoute.distanceSavedKm
     },
     topNearbyPlaces: topNearby,
+    topNearbyFoodPlaces: nearbyFoodPlaces.slice(0, 5).map((f) => ({
+      id: f.id,
+      name: f.name,
+      foodCategory: f.foodCategory,
+      foodCategoryLabel: f.foodCategoryLabel,
+      cuisine: f.cuisine,
+      distanceKm: Number((f.distanceKm || 0).toFixed(1)),
+      rating: f.rating,
+      priceLevel: f.priceLevel,
+      priceLevelDisplay: f.priceLevelDisplay,
+      isOpenNow: f.isOpenNow,
+      openingHoursDisplay: f.openingHoursDisplay,
+      vegetarian: f.vegetarian,
+      recommendationReason: f.recommendationReason,
+      address: f.address
+    })),
     itinerarySchedule: tripRoute.schedule ? {
       startTimeStr: tripRoute.schedule.startTimeStr,
       endTimeStr: tripRoute.schedule.endTimeStr,

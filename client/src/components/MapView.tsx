@@ -68,6 +68,19 @@ export const MapView: React.FC<MapViewProps> = ({
     );
   }, [activePlaces, selectedCategory]);
 
+  // Center and select place if initialSelectedPlaceId changes
+  useEffect(() => {
+    if (initialSelectedPlaceId) {
+      const p = activePlaces.find((item) => item.id === initialSelectedPlaceId);
+      if (p) {
+        setSelectedPlace(p);
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.flyTo([p.lat, p.lon], 15, { duration: 1 });
+        }
+      }
+    }
+  }, [initialSelectedPlaceId, activePlaces]);
+
   // Initialize Leaflet Map once
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;

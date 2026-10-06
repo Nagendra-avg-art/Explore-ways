@@ -961,3 +961,485 @@ out center body 25;`;
 
   return res.status(200).json(fallbackData);
 };
+
+// =========================================================================
+// PHASE 12 — FOOD EXPLORER DATA & ENDPOINTS
+// =========================================================================
+
+export type FoodCategory =
+  | 'all'
+  | 'local'
+  | 'indian'
+  | 'restaurant'
+  | 'cafe'
+  | 'fast_food'
+  | 'vegetarian'
+  | 'budget';
+
+export type FoodPriceLevel = 'budget' | 'moderate' | 'expensive' | 'unavailable';
+
+export interface BackendFoodPlace extends BackendPlace {
+  cuisine?: string;
+  priceLevel: FoodPriceLevel;
+  priceLevelDisplay: string;
+  openingHoursDisplay: string;
+  phone?: string;
+  website?: string;
+  takeaway?: boolean;
+  delivery?: boolean;
+  vegetarian?: boolean;
+  foodCategory: FoodCategory;
+  foodCategoryLabel: string;
+  recommendationReason: string;
+}
+
+export const DEMO_FOOD_PLACES: BackendFoodPlace[] = [
+  {
+    id: 'shadab-restaurant',
+    name: 'Hotel Shadab',
+    category: 'food',
+    categoryLabel: '🍴 Local Food',
+    foodCategory: 'local',
+    foodCategoryLabel: 'Local / Regional',
+    cuisine: 'Hyderabadi Dum Biryani & Kebabs',
+    rating: 4.5,
+    reviewCount: 16500,
+    lat: 17.3685,
+    lon: 78.4735,
+    visitDuration: '1 hr',
+    imageUrl: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=800&q=80',
+    shortDescription: 'Legendary heritage restaurant near Madina Circle famous for authentic Hyderabadi Dum Biryani and tender Mutton Kebabs.',
+    fullDescription: 'Founded decades ago in the heart of Old City, Hotel Shadab is acclaimed by locals and travelers alike for slow-cooked fragrant Biryani, rich Nihari, and freshly baked Sheermal.',
+    whyRecommended: 'Must-visit culinary heritage spot just 800m north of Charminar.',
+    recommendationReason: 'Good match because it is open now, within 0.8 km, and serves authentic local heritage food.',
+    tags: ['Biryani', 'Local Speciality', 'Mughlai'],
+    openingHours: '6:00 AM – 2:00 AM (Daily)',
+    openHour: 6.0,
+    closeHour: 26.0,
+    openingHoursDisplay: '6:00 AM – 2:00 AM (Daily)',
+    priceLevel: 'budget',
+    priceLevelDisplay: 'Budget Friendly',
+    entryFee: '₹250 – ₹450 per person',
+    vegetarian: false,
+    takeaway: true,
+    delivery: true,
+    address: 'High Court Rd, Madina Circle, Ghansi Bazaar, Hyderabad',
+    source: 'demo',
+    sourceName: 'Demo data'
+  },
+  {
+    id: 'nimrah-cafe',
+    name: 'Nimrah Cafe & Bakery',
+    category: 'cafes',
+    categoryLabel: '☕ Heritage Irani Cafe',
+    foodCategory: 'cafe',
+    foodCategoryLabel: 'Cafe & Tea Spot',
+    cuisine: 'Irani Chai & Fresh Bakery',
+    rating: 4.7,
+    reviewCount: 21300,
+    lat: 17.3619,
+    lon: 78.4745,
+    visitDuration: '30–45 min',
+    imageUrl: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&w=800&q=80',
+    shortDescription: 'Historic open-air tea stall situated right beside Charminar, famous for steaming Irani Chai and crunchy Osmania biscuits.',
+    fullDescription: 'Located directly adjacent to the western arch of Charminar, Nimrah offers a front-row view of the monument while enjoying traditional Zafrani chai, bun maska, and tie biscuits.',
+    whyRecommended: 'Iconic tea stall offering direct view of Charminar and fresh Osmania biscuits.',
+    recommendationReason: 'Good match: Open early morning to late night, located directly beside Charminar with budget-friendly prices.',
+    tags: ['Irani Chai', 'Osmania Biscuits', 'Bakery', 'Budget'],
+    openingHours: '4:00 AM – 11:30 PM (Daily)',
+    openHour: 4.0,
+    closeHour: 23.5,
+    openingHoursDisplay: '4:00 AM – 11:30 PM (Daily)',
+    priceLevel: 'budget',
+    priceLevelDisplay: 'Budget Friendly',
+    entryFee: '₹20 – ₹60 per person',
+    vegetarian: true,
+    takeaway: true,
+    delivery: false,
+    address: 'Opposite Mecca Masjid, Beside Charminar, Hyderabad',
+    source: 'demo',
+    sourceName: 'Demo data'
+  },
+  {
+    id: 'taj-mahal-hotel',
+    name: 'Taj Mahal Hotel (Abids)',
+    category: 'food',
+    categoryLabel: '🍴 Local Food',
+    foodCategory: 'vegetarian',
+    foodCategoryLabel: 'Vegetarian',
+    cuisine: 'South Indian Pure Vegetarian',
+    rating: 4.4,
+    reviewCount: 14200,
+    lat: 17.3892,
+    lon: 78.4758,
+    visitDuration: '45–60 min',
+    imageUrl: 'https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=800&q=80',
+    shortDescription: 'Renowned 1950s heritage establishment serving authentic Pure Vegetarian South Indian Thalis, crisp Dosas, and Filter Coffee.',
+    fullDescription: 'A landmark in Abids since the mid-20th century, Taj Mahal Hotel is celebrated for wholesome traditional vegetarian meals served on banana leaves with pure ghee sambar.',
+    whyRecommended: 'Clean, reliable pure vegetarian destination in central Hyderabad.',
+    recommendationReason: 'Good match: Dedicated pure vegetarian menu, high customer satisfaction, and easy accessibility.',
+    tags: ['Pure Vegetarian', 'South Indian', 'Filter Coffee', 'Thali'],
+    openingHours: '7:00 AM – 10:30 PM (Daily)',
+    openHour: 7.0,
+    closeHour: 22.5,
+    openingHoursDisplay: '7:00 AM – 10:30 PM (Daily)',
+    priceLevel: 'budget',
+    priceLevelDisplay: 'Budget Friendly',
+    entryFee: '₹120 – ₹250 per person',
+    vegetarian: true,
+    takeaway: true,
+    delivery: true,
+    address: 'King Koti Rd, Abids, Hyderabad',
+    source: 'demo',
+    sourceName: 'Demo data'
+  },
+  {
+    id: 'chutneys-banjara',
+    name: 'Chutneys',
+    category: 'food',
+    categoryLabel: '🍴 Restaurant',
+    foodCategory: 'vegetarian',
+    foodCategoryLabel: 'Vegetarian',
+    cuisine: 'South Indian Specialties & 6 Chutneys',
+    rating: 4.5,
+    reviewCount: 18900,
+    lat: 17.4201,
+    lon: 78.4485,
+    visitDuration: '1 hr',
+    imageUrl: 'https://images.unsplash.com/photo-1610192244261-3f33de3f55e4?auto=format&fit=crop&w=800&q=80',
+    shortDescription: 'Famous upscale vegetarian dining venue known for its signature Steamed Dosa served with six varieties of house-made chutneys.',
+    fullDescription: 'Pioneers of the signature Guntur Idli and Babai Hotel Butter Dosa, served in a modern air-conditioned family setting with a complimentary rainbow assortment of fresh chutneys.',
+    whyRecommended: 'Beloved regional vegetarian brand famous for its 6 unique artisanal chutneys.',
+    recommendationReason: 'Good match because it offers high ratings, comfortable family seating, and vegetarian excellence.',
+    tags: ['Pure Vegetarian', 'Steamed Dosa', 'Family Restaurant'],
+    openingHours: '7:00 AM – 11:00 PM (Daily)',
+    openHour: 7.0,
+    closeHour: 23.0,
+    openingHoursDisplay: '7:00 AM – 11:00 PM (Daily)',
+    priceLevel: 'moderate',
+    priceLevelDisplay: 'Moderate',
+    entryFee: '₹250 – ₹500 per person',
+    vegetarian: true,
+    takeaway: true,
+    delivery: true,
+    address: 'Road No. 1, Banjara Hills, Hyderabad',
+    source: 'demo',
+    sourceName: 'Demo data'
+  },
+  {
+    id: 'ram-ki-bandi',
+    name: 'Ram Ki Bandi',
+    category: 'food',
+    categoryLabel: '🍴 Fast Food',
+    foodCategory: 'fast_food',
+    foodCategoryLabel: 'Fast Food',
+    cuisine: 'Midnight Street Food Dosas',
+    rating: 4.3,
+    reviewCount: 12100,
+    lat: 17.3822,
+    lon: 78.4721,
+    visitDuration: '30 min',
+    imageUrl: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=800&q=80',
+    shortDescription: 'Trailblazing street cart that popularized late-night melted cheese dosas, paneer dosas, and pizza dosas in Hyderabad.',
+    fullDescription: 'Starting as an unassuming late-night cart near Mozamjahi Market, Ram Ki Bandi is credited with revolutionizing Hyderabad street food culture with piping hot, butter-drenched fusion dosas.',
+    whyRecommended: 'Iconic street food institution for fast, flavorful and inventive dosas.',
+    recommendationReason: 'Good match: Quick service, budget-friendly street food, and popular vegetarian fusion.',
+    tags: ['Street Food', 'Late Night', 'Butter Dosa', 'Fast Food'],
+    openingHours: '3:00 AM – 8:00 AM, 6:00 PM – 11:00 PM',
+    openHour: 6.0,
+    closeHour: 23.0,
+    openingHoursDisplay: '3:00 AM – 8:00 AM, 6:00 PM – 11:00 PM',
+    priceLevel: 'budget',
+    priceLevelDisplay: 'Budget Friendly',
+    entryFee: '₹80 – ₹150 per person',
+    vegetarian: true,
+    takeaway: true,
+    delivery: true,
+    address: 'Opposite Karachi Bakery, Mozamjahi Market, Nampally, Hyderabad',
+    source: 'demo',
+    sourceName: 'Demo data'
+  },
+  {
+    id: 'shah-ghouse',
+    name: 'Shah Ghouse Hotel & Restaurant',
+    category: 'food',
+    categoryLabel: '🍴 Restaurant',
+    foodCategory: 'indian',
+    foodCategoryLabel: 'Indian',
+    cuisine: 'Mughlai & North Indian',
+    rating: 4.4,
+    reviewCount: 25400,
+    lat: 17.3995,
+    lon: 78.4112,
+    visitDuration: '1 hr',
+    imageUrl: 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=800&q=80',
+    shortDescription: 'Bustling multi-story restaurant serving rich Mutton Biryani, Haleem, Tangdi Kebabs, and aromatic North Indian gravies.',
+    fullDescription: 'Renowned for its generous portion sizes and intensely spiced recipes, Shah Ghouse is a favorite for late-night family dining and authentic Haleem during festivals.',
+    whyRecommended: 'Top choice for hearty Mughlai dishes and rich North Indian flavors.',
+    recommendationReason: 'Good match: Fits standard travel budgets with generous portions and fast service.',
+    tags: ['Mughlai', 'Indian', 'Haleem', 'Family Dining'],
+    openingHours: '11:00 AM – 1:30 AM (Daily)',
+    openHour: 11.0,
+    closeHour: 25.5,
+    openingHoursDisplay: '11:00 AM – 1:30 AM (Daily)',
+    priceLevel: 'moderate',
+    priceLevelDisplay: 'Moderate',
+    entryFee: '₹250 – ₹450 per person',
+    vegetarian: false,
+    takeaway: true,
+    delivery: true,
+    address: 'Tolichowki Main Road, Hyderabad',
+    source: 'demo',
+    sourceName: 'Demo data'
+  },
+  {
+    id: 'niloufer-cafe-food',
+    name: 'Cafe Niloufer & Irani Chai',
+    category: 'cafes',
+    categoryLabel: '☕ Heritage Irani Cafe',
+    foodCategory: 'cafe',
+    foodCategoryLabel: 'Cafe',
+    cuisine: 'Irani Tea & Bun Maska',
+    rating: 4.8,
+    reviewCount: 15800,
+    lat: 17.4015,
+    lon: 78.4608,
+    visitDuration: '45 min',
+    imageUrl: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=800&q=80',
+    shortDescription: 'Legendary 1978 tea parlor serving rich, velvety Irani Chai with warm Osmania biscuits and maska buns.',
+    fullDescription: 'The gold standard for Hyderabadi chai culture, boiling rich buffalo milk for hours to create an unforgettable silky consistency.',
+    whyRecommended: 'Beloved local morning ritual with lively community energy and budget prices.',
+    recommendationReason: 'Good match: Highly rated (4.8⭐), opens early at 4 AM, and budget friendly.',
+    tags: ['Cafe', 'Irani Chai', 'Osmania Biscuits', 'Budget'],
+    openingHours: '4:00 AM – 11:30 PM (Daily)',
+    openHour: 4.0,
+    closeHour: 23.5,
+    openingHoursDisplay: '4:00 AM – 11:30 PM (Daily)',
+    priceLevel: 'budget',
+    priceLevelDisplay: 'Budget Friendly',
+    entryFee: '₹50 – ₹150 per person',
+    vegetarian: true,
+    takeaway: true,
+    delivery: true,
+    address: 'Red Hills, Lakdikapul, Hyderabad',
+    source: 'demo',
+    sourceName: 'Demo data'
+  }
+];
+
+const nearbyFoodCache = new Map<string, { timestamp: number; data: any }>();
+
+/**
+ * GET /api/places/food
+ * Location-Aware Food Explorer POI Discovery
+ */
+export const getNearbyFoodPlaces = async (req: Request, res: Response) => {
+  const rawLat = (req.query.lat || req.query.latitude) as string | undefined;
+  const rawLon = (req.query.lon || req.query.lng || req.query.longitude) as string | undefined;
+  const { radius, category, openNow } = req.query;
+
+  if (!rawLat || !rawLon) {
+    return res.status(400).json({ error: 'Latitude and longitude are required' });
+  }
+
+  const userLat = parseFloat(rawLat);
+  const userLon = parseFloat(rawLon);
+
+  if (isNaN(userLat) || isNaN(userLon)) {
+    return res.status(400).json({ error: 'Invalid numeric coordinates' });
+  }
+
+  // Radius defaults to 5 km (5000m), supports 1000, 3000, 5000, 10000m
+  const searchRadius = Math.min(15000, Math.max(1000, radius ? parseInt(radius as string, 10) : 5000));
+  const categoryFilter = (category as string) || 'all';
+  const isOpenNowFilter = openNow === 'true';
+
+  const cacheKey = `food_${userLat.toFixed(3)}_${userLon.toFixed(3)}_${searchRadius}_${categoryFilter}_${isOpenNowFilter}`;
+  const cached = nearbyFoodCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return res.status(200).json(cached.data);
+  }
+
+  const liveFoodPlaces: BackendFoodPlace[] = [];
+  const seenKeys = new Set<string>();
+
+  // TIER 1: Nominatim live dining search bounded by viewbox
+  try {
+    const delta = Math.min(0.12, (searchRadius / 1000) * 0.012);
+    const viewbox = `${userLon - delta},${userLat + delta},${userLon + delta},${userLat - delta}`;
+
+    let queryTerm = 'restaurant';
+    if (categoryFilter === 'cafe') queryTerm = 'cafe';
+    else if (categoryFilter === 'fast_food') queryTerm = 'fast_food';
+    else if (categoryFilter === 'vegetarian') queryTerm = 'vegetarian';
+
+    const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(queryTerm)}&bounded=1&viewbox=${viewbox}&limit=35`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+    const nomRes = await fetch(nominatimUrl, {
+      headers: {
+        'User-Agent': 'SmartTravelCompanion/1.0 (academic-project)',
+        'Accept-Language': 'en'
+      },
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (nomRes.ok) {
+      const items = (await nomRes.json()) as any[];
+      if (Array.isArray(items)) {
+        for (const item of items) {
+          const rawName = item.name || item.display_name.split(',')[0];
+          if (!rawName || rawName.trim().length < 2) continue;
+          const name = rawName.trim();
+          const pLat = parseFloat(item.lat);
+          const pLon = parseFloat(item.lon);
+          if (isNaN(pLat) || isNaN(pLon)) continue;
+
+          const distanceKm = calculateHaversineDistanceKm(userLat, userLon, pLat, pLon);
+          if (distanceKm * 1000 > searchRadius) continue;
+
+          const normKey = `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}_${pLat.toFixed(3)}_${pLon.toFixed(3)}`;
+          if (seenKeys.has(normKey)) continue;
+          seenKeys.add(normKey);
+
+          const addressParts = item.display_name.split(',');
+          const address = addressParts.slice(1, 3).map((s: string) => s.trim()).filter(Boolean).join(', ') || undefined;
+
+          // Categorize food place
+          const lowerName = name.toLowerCase();
+          const itemType = (item.type || '').toLowerCase();
+          let fCat: FoodCategory = 'restaurant';
+          let fCatLabel = 'Restaurant';
+
+          if (itemType === 'cafe' || lowerName.includes('cafe') || lowerName.includes('chai') || lowerName.includes('tea') || lowerName.includes('coffee') || lowerName.includes('bakery')) {
+            fCat = 'cafe';
+            fCatLabel = 'Cafe';
+          } else if (itemType === 'fast_food' || lowerName.includes('fast food') || lowerName.includes('burger') || lowerName.includes('pizza') || lowerName.includes('tiffin')) {
+            fCat = 'fast_food';
+            fCatLabel = 'Fast Food';
+          } else if (lowerName.includes('veg') || lowerName.includes('bhojanalay') || lowerName.includes('jain') || lowerName.includes('udupi')) {
+            fCat = 'vegetarian';
+            fCatLabel = 'Vegetarian';
+          } else if (lowerName.includes('biryani') || lowerName.includes('hyderabadi') || lowerName.includes('bawarchi') || lowerName.includes('shadab') || lowerName.includes('dhaba')) {
+            fCat = 'local';
+            fCatLabel = 'Local / Regional';
+          } else {
+            fCat = 'restaurant';
+            fCatLabel = 'Restaurant';
+          }
+
+          if (categoryFilter !== 'all' && fCat !== categoryFilter) {
+            continue;
+          }
+
+          const travelTimeMin = Math.max(3, Math.round(distanceKm * 2.5 + 3));
+
+          liveFoodPlaces.push({
+            id: `osm-food-${item.place_id || item.osm_id}`,
+            name,
+            category: 'food',
+            categoryLabel: '🍴 Dining',
+            foodCategory: fCat,
+            foodCategoryLabel: fCatLabel,
+            cuisine: undefined, // Not fabricated if missing in OSM
+            lat: pLat,
+            lon: pLon,
+            distanceKm,
+            travelTimeMin,
+            visitDuration: fCat === 'cafe' ? '30–45 min' : '45–60 min',
+            imageUrl: CATEGORY_IMAGE_MAP[fCat === 'cafe' ? 'cafes' : 'food'] || CATEGORY_IMAGE_MAP.food,
+            shortDescription: `Authentic ${fCatLabel} discovered near your current coordinates${address ? ` in ${address}` : ''}.`,
+            fullDescription: item.display_name,
+            whyRecommended: `Discovered live: ${distanceKm.toFixed(1)} km from your current GPS position.`,
+            recommendationReason: `Good match because it is located within ${distanceKm.toFixed(1)} km of your location.`,
+            tags: [fCatLabel, 'Live POI', ...(address ? [address] : [])],
+            source: 'live',
+            sourceName: 'Live OpenStreetMap data',
+            address,
+            priceLevel: 'unavailable',
+            priceLevelDisplay: 'Price not available',
+            openingHoursDisplay: 'Hours unavailable',
+            rating: undefined, // Strictly real: not invented
+            reviewCount: undefined,
+            openingHours: undefined,
+            isOpenNow: undefined,
+            vegetarian: fCat === 'vegetarian' ? true : undefined
+          });
+        }
+      }
+    }
+  } catch (nomErr: any) {
+    console.warn('[Food API] Nominatim food query failed or timed out:', nomErr?.message);
+  }
+
+  // TIER 2: If live places found >= 3, return them sorted by distance
+  if (liveFoodPlaces.length >= 3) {
+    liveFoodPlaces.sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
+
+    let filtered = liveFoodPlaces;
+    if (isOpenNowFilter) {
+      filtered = filtered.filter(p => p.isOpenNow === true);
+    }
+
+    const resultData = {
+      success: true,
+      isLive: true,
+      source: 'osm-live',
+      sourceName: 'Live OpenStreetMap data',
+      origin: { lat: userLat, lon: userLon },
+      radiusMeters: searchRadius,
+      total: filtered.length,
+      places: filtered
+    };
+
+    nearbyFoodCache.set(cacheKey, { timestamp: Date.now(), data: resultData });
+    return res.status(200).json(resultData);
+  }
+
+  // TIER 3: Curated Demo Fallback with distance recalculation
+  let demoFallback = DEMO_FOOD_PLACES.map((p) => {
+    const dist = calculateHaversineDistanceKm(userLat, userLon, p.lat, p.lon);
+    const isOpen = checkIsOpenNow(p);
+    return {
+      ...p,
+      distanceKm: dist,
+      travelTimeMin: Math.max(3, Math.round(dist * 2.5 + 3)),
+      isOpenNow: isOpen,
+      recommendationReason: `Good match because it is ${isOpen ? 'open now, ' : ''}within ${dist.toFixed(1)} km, and fits your budget.`,
+      source: 'demo' as const,
+      sourceName: 'Demo data'
+    };
+  });
+
+  // Filter demo fallback by category
+  if (categoryFilter && categoryFilter !== 'all') {
+    if (categoryFilter === 'budget') {
+      demoFallback = demoFallback.filter((p) => p.priceLevel === 'budget');
+    } else {
+      demoFallback = demoFallback.filter((p) => p.foodCategory === categoryFilter);
+    }
+  }
+
+  // Filter demo fallback by open now
+  if (isOpenNowFilter) {
+    demoFallback = demoFallback.filter((p) => p.isOpenNow === true);
+  }
+
+  demoFallback.sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
+
+  const fallbackResult = {
+    success: true,
+    isLive: false,
+    source: 'demo',
+    sourceName: 'Demo data',
+    origin: { lat: userLat, lon: userLon },
+    radiusMeters: searchRadius,
+    total: demoFallback.length,
+    places: demoFallback
+  };
+
+  return res.status(200).json(fallbackResult);
+};
+

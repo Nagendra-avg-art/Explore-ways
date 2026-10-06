@@ -74,6 +74,33 @@ export interface RecommendedPlace extends Place {
   scoreBreakdown: ScoreBreakdown;
 }
 
+export type FoodCategory =
+  | 'all'
+  | 'local'
+  | 'indian'
+  | 'restaurant'
+  | 'cafe'
+  | 'fast_food'
+  | 'vegetarian'
+  | 'budget';
+
+export type FoodPriceLevel = 'budget' | 'moderate' | 'expensive' | 'unavailable';
+
+export interface FoodPlace extends Place {
+  cuisine?: string;
+  priceLevel: FoodPriceLevel;
+  priceLevelDisplay: string;
+  openingHoursDisplay: string;
+  phone?: string;
+  website?: string;
+  takeaway?: boolean;
+  delivery?: boolean;
+  vegetarian?: boolean;
+  foodCategory: FoodCategory;
+  foodCategoryLabel: string;
+  recommendationReason: string;
+}
+
 export type TimeOption = '2h' | '4h' | 'halfDay' | 'fullDay';
 export type BudgetOption = '500' | '1000' | '2000' | '5000';
 export type SortOption = 'recommended' | 'distance' | 'rating';

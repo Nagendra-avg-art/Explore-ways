@@ -70,6 +70,22 @@ export interface AIContextData {
     address?: string;
     matchReasons?: string[];
   }>;
+  topNearbyFoodPlaces?: Array<{
+    id: string;
+    name: string;
+    foodCategory: string;
+    foodCategoryLabel: string;
+    cuisine?: string;
+    distanceKm: number;
+    rating?: number;
+    priceLevel: string;
+    priceLevelDisplay: string;
+    isOpenNow?: boolean;
+    openingHoursDisplay: string;
+    vegetarian?: boolean;
+    recommendationReason?: string;
+    address?: string;
+  }>;
   itinerarySchedule?: {
     startTimeStr: string;
     endTimeStr: string;
@@ -196,15 +212,16 @@ export function generateGroundedFallbackResponse(
   context: AIContextData
 ): AIResponsePayload {
   const query = message.toLowerCase().trim();
-  const city = context.location.city || 'your area';
-  const stops = context.selectedTrip?.stops || [];
+  const city = context?.location?.city || 'your area';
+  const stops = context?.selectedTrip?.stops || [];
   const stopCount = stops.length;
-  const feasibility = context.itineraryFeasibility;
-  const transport = context.transportRecommendation;
-  const fare = context.tripFareSummary;
-  const nearby = context.topNearbyPlaces || [];
-  const schedule = context.itinerarySchedule;
-  const prefs = context.userPreferences;
+  const feasibility = context?.itineraryFeasibility;
+  const transport = context?.transportRecommendation;
+  const fare = context?.tripFareSummary;
+  const nearby = context?.topNearbyPlaces || [];
+  const foodPlaces = context?.topNearbyFoodPlaces || [];
+  const schedule = context?.itinerarySchedule;
+  const prefs = context?.userPreferences;
 
   let answer = '';
   let followUps: string[] = [];
@@ -233,6 +250,91 @@ export function generateGroundedFallbackResponse(
       `• Itinerary feasibility and visit duration estimates\n\n` +
       `I cannot verify unrecorded historical trivia or unlisted private details.`;
     followUps = ['What should I visit first?', 'How much will my trip cost?', 'Which transport should I take?'];
+  }
+
+  // 0.5 Food Explorer Intents: "What should I eat nearby?", "Cheapest food", "Vegetarian", "Add restaurant"
+  else if (
+    query.includes('eat nearby') ||
+    query.includes('what should i eat') ||
+    query.includes('where to eat') ||
+    query.includes('food nearby') ||
+    query.includes('food option is cheapest') ||
+    query.includes('cheapest food') ||
+    query.includes('vegetarian food') ||
+    query.includes('get vegetarian') ||
+    query.includes('food near my next stop') ||
+    query.includes('add a restaurant') ||
+    query.includes('food place is closest') ||
+    query.includes('closest food')
+  ) {
+    if (foodPlaces.length === 0) {
+      answer = `[APPLICATION DATA] I couldn't find reliable food information nearby. Try expanding your search radius to 5 km or 10 km in the Food Explorer tab.`;
+      followUps = ['What can I do near me?', 'What should I visit first?'];
+    } else if (query.includes('cheapest') || query.includes('cheap')) {
+      const budgetOptions = foodPlaces.filter(f => f.priceLevel === 'budget');
+      const pick = budgetOptions.length > 0 ? budgetOptions[0] : foodPlaces[0];
+      answer = `[APPLICATION DATA] **Cheapest Food Option:** **${pick.name}**\n\n` +
+        `• **Price Level:** [APPLICATION DATA] ${pick.priceLevelDisplay}\n` +
+        `• **Distance:** [ESTIMATE] ~${pick.distanceKm.toFixed(1)} km away\n` +
+        `• **Category:** ${pick.foodCategoryLabel} ${pick.cuisine ? `(${pick.cuisine})` : ''}\n` +
+        `• **Status:** ${pick.isOpenNow === true ? '🟢 Open now' : pick.openingHoursDisplay}\n\n` +
+        `You can tap "View on Map" or "Add to Trip" from the Food Explorer tab!`;
+      followUps = ['Where can I get vegetarian food?', 'What should I eat nearby?', 'How much will my trip cost?'];
+    } else if (query.includes('vegetarian') || query.includes('veg')) {
+      const vegOptions = foodPlaces.filter(f => f.vegetarian === true || f.foodCategory === 'vegetarian');
+      if (vegOptions.length > 0) {
+        answer = `[APPLICATION DATA] **Vegetarian Dining Options in ${city}:**\n\n`;
+        vegOptions.slice(0, 3).forEach((v, idx) => {
+          answer += `${idx + 1}. **${v.name}** (${v.distanceKm.toFixed(1)} km away)\n` +
+            `   • ${v.cuisine || v.foodCategoryLabel} · ${v.priceLevelDisplay}\n` +
+            `   • Status: ${v.isOpenNow === true ? '🟢 Open now' : v.openingHoursDisplay}\n`;
+        });
+        answer += `\n*All options are mapped in the Food Explorer tab.*`;
+      } else {
+        answer = `[APPLICATION DATA] None of the currently mapped nearby places are explicitly tagged as pure vegetarian in local data. Check the Food Explorer tab for general restaurants.`;
+      }
+      followUps = ['What should I eat nearby?', 'Which food option is cheapest?', 'What should I visit first?'];
+    } else if (query.includes('near my next stop')) {
+      if (stops.length > 0) {
+        const nextStop = stops[0];
+        answer = `[APPLICATION DATA] **Food Options near ${nextStop.name}:**\n\n`;
+        const nearNext = foodPlaces.slice(0, 2);
+        nearNext.forEach((f, idx) => {
+          answer += `${idx + 1}. **${f.name}** (~${f.distanceKm.toFixed(1)} km from your current spot)\n` +
+            `   • Category: ${f.foodCategoryLabel} · ${f.priceLevelDisplay}\n`;
+        });
+        answer += `\n*Tip: You can add dining stops directly into your route in the Food Explorer tab!*`;
+      } else {
+        answer = `[APPLICATION DATA] You don't have any stops in your itinerary yet. Add a destination or browse nearby dining in the Food Explorer tab!`;
+      }
+      followUps = ['What should I eat nearby?', 'What should I visit first?'];
+    } else if (query.includes('add a restaurant') || query.includes('add restaurant')) {
+      answer = `[APPLICATION DATA] **Yes, you can add any restaurant or cafe to your trip!**\n\n` +
+        `1. Go to the **Food Explorer** tab.\n` +
+        `2. Find your preferred dining spot.\n` +
+        `3. Tap **"Add to Trip"**.\n\n` +
+        `Our itinerary engine will automatically incorporate it into your schedule, calculate travel times, and update your feasibility buffer.`;
+      followUps = ['What should I eat nearby?', 'Can I fit another place?'];
+    } else if (query.includes('closest') || query.includes('closest food')) {
+      const closest = [...foodPlaces].sort((a, b) => a.distanceKm - b.distanceKm)[0];
+      answer = `[APPLICATION DATA] **Closest Food Option:** **${closest.name}**\n\n` +
+        `• **Distance:** [ESTIMATE] Only **${closest.distanceKm.toFixed(1)} km** from your current location\n` +
+        `• **Category:** ${closest.foodCategoryLabel} ${closest.cuisine ? `(${closest.cuisine})` : ''}\n` +
+        `• **Status:** ${closest.isOpenNow === true ? '🟢 Open now' : closest.openingHoursDisplay}\n` +
+        `• **Price Level:** ${closest.priceLevelDisplay}\n`;
+      followUps = ['Which food option is cheapest?', 'Where can I get vegetarian food?'];
+    } else {
+      // General "What should I eat nearby?"
+      answer = `[APPLICATION DATA] **Recommended Dining Near You in ${city}:**\n\n`;
+      foodPlaces.slice(0, 3).forEach((f, idx) => {
+        answer += `${idx + 1}. **${f.name}** (${f.distanceKm.toFixed(1)} km away)\n` +
+          `   • ${f.cuisine ? `Cuisine: ${f.cuisine}` : `Category: ${f.foodCategoryLabel}`}\n` +
+          `   • Price: ${f.priceLevelDisplay} · ${f.isOpenNow === true ? '🟢 Open now' : f.openingHoursDisplay}\n` +
+          `   • "${f.recommendationReason || 'Convenient dining nearby'}"\n\n`;
+      });
+      answer += `Tap **"Add to Trip"** on any place in the Food Explorer tab to include it in your itinerary!`;
+      followUps = ['Which food option is cheapest?', 'Where can I get vegetarian food?', 'Which food place is closest?'];
+    }
   }
 
   // 1. "What should I visit first?" / "Why is [place] first?" / "Order of stops"
@@ -599,7 +701,7 @@ export function generateGroundedFallbackResponse(
       city,
       firstStop: stops[0]?.name,
       totalStops: stopCount,
-      preferredTransport: transport?.modeLabel || context.selectedTrip.preferredMode || 'Auto Rickshaw',
+      preferredTransport: transport?.modeLabel || context?.selectedTrip?.preferredMode || 'Auto Rickshaw',
       estimatedFareDisplay: fare?.totalFareDisplay || transport?.fareDisplay,
       feasibilityStatus: feasibility?.statusLabel,
       remainingBufferMin: feasibility?.remainingMinutes
@@ -690,7 +792,7 @@ export async function queryAITravelGuide(
         city: context.location.city || 'your area',
         firstStop: context.selectedTrip?.stops?.[0]?.name,
         totalStops: context.selectedTrip?.stops?.length || 0,
-        preferredTransport: context.transportRecommendation?.modeLabel || context.selectedTrip.preferredMode || 'Auto',
+        preferredTransport: context.transportRecommendation?.modeLabel || context?.selectedTrip?.preferredMode || 'Auto',
         estimatedFareDisplay: context.tripFareSummary?.totalFareDisplay || context.transportRecommendation?.fareDisplay,
         feasibilityStatus: context.itineraryFeasibility?.statusLabel,
         remainingBufferMin: context.itineraryFeasibility?.remainingMinutes

@@ -9,11 +9,12 @@ import {
   CheckCircle2, 
   AlertCircle,
   Activity,
-  SlidersHorizontal
+  SlidersHorizontal,
+  UtensilsCrossed
 } from 'lucide-react';
 import { usePreferences } from '../context/PreferencesContext';
 
-export type NavTab = 'home' | 'explore' | 'map' | 'plan' | 'ai' | 'mytrip';
+export type NavTab = 'home' | 'explore' | 'food' | 'map' | 'plan' | 'ai' | 'mytrip';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -43,6 +44,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   const navItems = [
     { id: 'home' as NavTab, label: 'Home', icon: Compass },
     { id: 'explore' as NavTab, label: 'Explore', icon: MapPin },
+    { id: 'food' as NavTab, label: 'Food', icon: UtensilsCrossed },
     { id: 'map' as NavTab, label: 'Map', icon: MapIcon },
     { id: 'plan' as NavTab, label: 'Plan', icon: Calendar },
     { id: 'ai' as NavTab, label: 'AI Guide', icon: Sparkles, highlight: true },
@@ -221,7 +223,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
         className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-white/95 backdrop-blur-lg border-t border-slate-200 shadow-lg px-2 py-1.5"
         style={{ paddingBottom: 'calc(0.375rem + env(safe-area-inset-bottom, 0px))' }}
       >
-        <div className="grid grid-cols-6 gap-1 items-center">
+        <div className="grid grid-cols-7 gap-0.5 items-center">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
