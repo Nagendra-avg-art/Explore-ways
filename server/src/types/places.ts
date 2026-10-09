@@ -1,9 +1,28 @@
 // server/src/types/places.ts
-// Shared place and food data contracts for the backend
+// Unified Normalized Place and Dining Data Contracts with Provenance & Confidence
+
+export type DataConfidence = 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN';
+
+export type PlaceProvenance = 'osm' | 'curated' | 'commercial';
+
+export interface PhotoMetadata {
+  photoUrl: string | null;
+  photoSource?: string;
+  attribution?: string;
+  license?: string;
+  verifiedForPlace: boolean;
+  sourcePlaceId?: string;
+  lastChecked?: string;
+}
 
 export interface BackendPlace {
   id: string;
+  internalId?: string;
+  provider?: string;
+  providerPlaceId?: string;
   name: string;
+  officialName?: string;
+  alternateNames?: string[];
   category: string;
   categoryLabel: string;
   rating?: number;
@@ -15,6 +34,7 @@ export interface BackendPlace {
   isOpenNow?: boolean;
   visitDuration: string;
   imageUrl: string;
+  photo?: PhotoMetadata;
   shortDescription: string;
   fullDescription?: string;
   whyRecommended: string;
@@ -24,11 +44,20 @@ export interface BackendPlace {
   closeHour?: number; // 24h format (e.g., 17.5 for 5:30 PM)
   closedDays?: number[]; // 0 = Sunday, 5 = Friday, etc.
   entryFee?: string;
+  website?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
   nearbyFood?: string[];
   transportEstimates?: { mode: string; label: string; time: string; cost: string; icon: string }[];
-  source?: 'live' | 'demo';
+  source?: 'live' | 'demo' | 'curated';
   sourceName?: string;
-  address?: string;
+  provenance?: PlaceProvenance;
+  confidence?: DataConfidence;
+  verified?: boolean;
+  lastUpdated?: string;
 }
 
 export type FoodCategory =

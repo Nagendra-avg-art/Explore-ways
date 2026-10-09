@@ -158,6 +158,21 @@ export interface AIContextData {
       fareDisplay: string;
     }>;
   };
+  weather?: {
+    current: {
+      temperature: number;
+      feelsLike: number;
+      condition: string;
+      precipitationProbability: number;
+      windSpeedKmh?: number;
+    };
+    hourlyForecastSummary?: Array<{
+      time: string;
+      temperature: number;
+      condition: string;
+      precipitationProbability: number;
+    }>;
+  };
 }
 
 export interface ChatMessage {
@@ -226,8 +241,43 @@ export function generateGroundedFallbackResponse(
   let answer = '';
   let followUps: string[] = [];
 
-  // 0. Safeguard: Unrecorded details, obscure historical trivia, dates not in application data
-  const isUnrecordedQuestion = 
+  // 0. Safeguard: Adversarial queries & unrecorded details
+  if (
+    query.includes('exact uber') || 
+    query.includes('exact ola') || 
+    query.includes('exact cab price') || 
+    query.includes('surge price') ||
+    query.includes('live uber')
+  ) {
+    answer = `[APPLICATION DATA] Live dynamic ride-hailing fares (such as real-time Uber or Ola surge pricing) are unavailable in our application records.\n\n` +
+      `Our application computes [ESTIMATE] fares based on city baseline regulatory tariffs (Cab estimate: ${fare?.totalFareDisplay || '₹120–₹250'}). Actual ride-hail app fares fluctuate dynamically based on live driver availability and surge multipliers.`;
+    followUps = ['How much will my trip cost?', 'Which transport should I take?'];
+  } else if (
+    (query.includes('3:00 am') || query.includes('3 am') || query.includes('midnight') || query.includes('open at 3')) &&
+    (query.includes('temple') || query.includes('monument') || query.includes('definitely open') || query.includes('place'))
+  ) {
+    answer = `[APPLICATION DATA] Verified records do not indicate 3:00 AM public access for this venue.\n\n` +
+      `Temples and heritage landmarks in **${city}** generally observe regular daylight operational hours (typically 6:00 AM – 8:30 PM, often with an afternoon darshan break). Please check official temple trust announcements for special festival or midnight brahmotsavam timings.`;
+    followUps = ['What should I visit first?', 'Tell me about this place'];
+  } else if (
+    query.includes("isn't in the current results") || 
+    query.includes("not in the current results") || 
+    query.includes('unlisted place') || 
+    query.includes('invent a place') || 
+    query.includes('outside the catalog')
+  ) {
+    answer = `[APPLICATION DATA] To maintain strict data integrity and prevent hallucinations, I only recommend destinations verified and present in our application's active discovery catalog for **${city}**.\n\n` +
+      `You can explore all ${nearby.length} verified attractions in the Explore tab or adjust your search filter and distance radius to discover more.`;
+    followUps = ['What can I do near me?', 'What should I visit first?'];
+  } else if (
+    query.includes('exact traffic') || 
+    query.includes('live traffic right now') || 
+    query.includes('current traffic congestion')
+  ) {
+    answer = `[APPLICATION DATA] Real-time road sensor congestion and live traffic camera feeds are not available in our application records.\n\n` +
+      `Travel durations in our itinerary are [ESTIMATE] computed using road network distance averages (approximately ~${context.selectedTrip?.totalTravelTimeMin || 25} minutes total travel time for your current route).`;
+    followUps = ['Which transport should I take?', 'Summarize my itinerary'];
+  } else if (
     query.includes('1950') ||
     query.includes('1800') ||
     query.includes('born') ||
@@ -239,9 +289,8 @@ export function generateGroundedFallbackResponse(
     query.includes('secret') ||
     query.includes('unverified') ||
     query.includes('unrecorded') ||
-    query.includes('third cousin');
-
-  if (isUnrecordedQuestion) {
+    query.includes('third cousin')
+  ) {
     answer = `[APPLICATION DATA] This specific detail is not available in our current application records.\n\n` +
       `Our application data maintains verified operational and travel information for **${city}**, including:\n` +
       `• Active destinations & POIs (${stops.length} in your trip, ${nearby.length} nearby)\n` +
@@ -250,6 +299,82 @@ export function generateGroundedFallbackResponse(
       `• Itinerary feasibility and visit duration estimates\n\n` +
       `I cannot verify unrecorded historical trivia or unlisted private details.`;
     followUps = ['What should I visit first?', 'How much will my trip cost?', 'Which transport should I take?'];
+  }
+
+
+  // 0.4 Weather-Aware Travel Intelligence Intents (Phase 13)
+  else if (
+    query.includes('weather') ||
+    query.includes('rain') ||
+    query.includes('umbrella') ||
+    query.includes('temperature') ||
+    query.includes('hot outside') ||
+    query.includes('storm') ||
+    query.includes('forecast') ||
+    query.includes('walking a good idea') ||
+    query.includes('visit if it rains') ||
+    query.includes('change my transport')
+  ) {
+    if (!context.weather || !context.weather.current) {
+      answer = `[APPLICATION DATA] The current weather forecast is unavailable, so I can't reliably assess weather impact.\n\n` +
+        `Please check that network connectivity is active or tap the refresh button in the Weather section.`;
+      followUps = ['What should I visit first?', 'Which transport should I take?', 'How much will my trip cost?'];
+    } else {
+      const w = context.weather.current;
+      const hourly = context.weather.hourlyForecastSummary || [];
+      const isRainLikely = w.precipitationProbability >= 40 || w.condition.toLowerCase().includes('rain');
+      const isHighHeat = w.temperature >= 35;
+      const preferredMode = context.selectedTrip?.preferredMode || 'auto';
+
+      answer = `[APPLICATION DATA] **Current Weather in ${city}:**\n\n` +
+        `• **Condition:** ${w.condition} (${w.temperature}°C, Feels like ${w.feelsLike}°C)\n` +
+        `• **Precipitation Probability:** ${w.precipitationProbability}%\n` +
+        (w.windSpeedKmh ? `• **Wind Speed:** ${w.windSpeedKmh} km/h\n\n` : '\n');
+
+      if (query.includes('visit if it rains') || (isRainLikely && query.includes('what should i visit'))) {
+        const indoorFood = foodPlaces.filter(f => f.foodCategory === 'cafe' || f.foodCategory === 'restaurant');
+        const indoorPlaces = stops.filter(s => s.category === 'museum' || s.category === 'shopping' || s.category === 'cafes');
+        answer += `[APPLICATION DATA] **Recommended Rainy-Day Indoor Stops:**\n`;
+        if (indoorPlaces.length > 0) {
+          indoorPlaces.forEach(p => {
+            answer += `• **${p.name}:** Enclosed indoor venue sheltered from rain.\n`;
+          });
+        }
+        if (indoorFood.length > 0) {
+          indoorFood.slice(0, 2).forEach(f => {
+            answer += `• **${f.name}:** ${f.foodCategoryLabel} (${f.priceLevelDisplay}) — great spot to wait out showers.\n`;
+          });
+        }
+        if (indoorPlaces.length === 0 && indoorFood.length === 0) {
+          answer += `• Consider exploring indoor museums, heritage galleries, or covered shopping arcades during showers.\n`;
+        }
+      } else if (query.includes('walking a good idea') || query.includes('walk') || query.includes('change my transport')) {
+        if (isRainLikely) {
+          answer += `[ESTIMATE] Walking may be uncomfortable due to expected rain (${w.precipitationProbability}% chance).\n` +
+            `• **Transport Advice:** Consider switching to a **Cab** for enclosed door-to-door comfort.\n` +
+            `• You can tap "Switch to Cab" in My Trip at any time!`;
+        } else if (isHighHeat) {
+          answer += `[ESTIMATE] Walking long distances in ${w.temperature}°C heat can be fatiguing.\n` +
+            `• **Transport Advice:** Consider an **Auto Rickshaw** or **Cab** for shaded transit, or carry water and stay hydrated.`;
+        } else {
+          answer += `[APPLICATION DATA] Walking conditions are favorable! With ${w.temperature}°C and low rain probability (${w.precipitationProbability}%), short pedestrian strolls are pleasant.`;
+        }
+      } else if (isRainLikely) {
+        answer += `[ESTIMATE] **Rain Alert:** Showers are expected during your travel window.\n` +
+          `• Carry an umbrella or rain cover for outdoor monuments.\n` +
+          (preferredMode === 'walk' ? `• Since Walking is currently active, consider taking a Cab if heavy rain develops.\n` : '') +
+          `• Check the Weather section in My Trip to review weather-aware itinerary reordering suggestions!`;
+      } else {
+        answer += `[APPLICATION DATA] Conditions are clear and favorable for your planned itinerary! Enjoy your sightseeing around ${city}.`;
+      }
+
+      if (hourly.length > 0) {
+        answer += `\n\n**Upcoming Hours:**\n` +
+          hourly.slice(0, 4).map(h => `• ${h.time}: ${h.condition}, ${h.temperature}°C (Rain ${h.precipitationProbability}%)`).join('\n');
+      }
+
+      followUps = ['What should I visit if it rains?', 'Is walking a good idea in this weather?', 'What should I visit first?'];
+    }
   }
 
   // 0.5 Food Explorer Intents: "What should I eat nearby?", "Cheapest food", "Vegetarian", "Add restaurant"
@@ -362,7 +487,7 @@ export function generateGroundedFallbackResponse(
     } else {
       const firstStop = stops[0];
       const schedFirst = schedule?.stops?.[0];
-      const isOpt = context.selectedTrip.isOptimized;
+      const isOpt = context?.selectedTrip?.isOptimized;
 
       answer = `[APPLICATION DATA] You should visit **${firstStop.name}** first in your itinerary.\n\n` +
         `• **Order Reason:** ${isOpt ? 'Our route optimizer ordered this first for minimal travel distance and maximum route efficiency.' : 'This is your first scheduled destination starting from your origin.'}\n` +
@@ -428,8 +553,8 @@ export function generateGroundedFallbackResponse(
     query.includes('budget')
   ) {
     const fareDisplay = fare?.totalFareDisplay || transport?.fareDisplay || '₹100–₹160 estimated';
-    const mode = transport?.modeLabel || context.selectedTrip.preferredMode || 'Auto Rickshaw';
-    const budget = prefs.budgetAmount || 1000;
+    const mode = transport?.modeLabel || context?.selectedTrip?.preferredMode || 'Auto Rickshaw';
+    const budget = prefs?.budgetAmount || 1000;
     const remaining = transport?.budgetImpact?.remainingBudgetMinInr;
 
     answer = `[ESTIMATE] **Trip Cost Breakdown for ${city}:**\n\n` +
@@ -510,7 +635,7 @@ export function generateGroundedFallbackResponse(
     query.includes('tight schedule')
   ) {
     if (!feasibility) {
-      answer = `[APPLICATION DATA] You currently have ${stopCount} stops in your trip. With an available window of ${prefs.availableHours || 4} hours, you can comfortably add 1 to 2 more destinations (each stop typically takes 45–60 minutes plus travel time).`;
+      answer = `[APPLICATION DATA] You currently have ${stopCount} stops in your trip. With an available window of ${prefs?.availableHours || 4} hours, you can comfortably add 1 to 2 more destinations (each stop typically takes 45–60 minutes plus travel time).`;
       followUps = ['What can I do near me?', 'What should I visit first?'];
     } else {
       const remainingMin = feasibility.remainingMinutes;
@@ -535,12 +660,12 @@ export function generateGroundedFallbackResponse(
         answer = `[APPLICATION DATA] **Adding another place is not recommended — your schedule is tight.**\n\n` +
           `• **Remaining Buffer:** [ESTIMATE] only **${remainingMin} minutes**\n` +
           `• **Current Trip Time:** [ESTIMATE] ${totalMin} min out of ${availMin} min available\n\n` +
-          `Adding another stop would push your schedule over your ${prefs.availableHours}-hour limit. We recommend sticking to your current ${stopCount} stops to enjoy a relaxed visit.`;
+          `Adding another stop would push your schedule over your ${prefs?.availableHours || 4}-hour limit. We recommend sticking to your current ${stopCount} stops to enjoy a relaxed visit.`;
         followUps = ['I only have 2 hours. What should I skip?', 'Summarize my itinerary', 'Which transport should I take?'];
       } else {
         answer = `[APPLICATION DATA] **No, your itinerary is already exceeding your available time by ${feasibility.exceededMinutes} minutes.**\n\n` +
           `• **Total Planned Time:** [ESTIMATE] ${totalMin} min\n` +
-          `• **Available Window:** ${availMin} min (${prefs.availableHours} hours)\n\n` +
+          `• **Available Window:** ${availMin} min (${prefs?.availableHours || 4} hours)\n\n` +
           `To make your trip feasible, consider removing 1 stop or increasing your available time in your travel profile.`;
         followUps = ['I only have 2 hours. What should I skip?', 'Summarize my itinerary', 'Which transport should I take?'];
       }

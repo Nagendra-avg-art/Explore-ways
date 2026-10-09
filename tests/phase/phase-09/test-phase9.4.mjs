@@ -2,7 +2,7 @@
 import { 
   recommendTransportMode, 
   recommendTripTransport 
-} from './client/src/services/transportRecommendationService.ts';
+} from '../../../client/src/services/transportRecommendationService.ts';
 
 const BASE_URL = 'http://localhost:5000/api';
 

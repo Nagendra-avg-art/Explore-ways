@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { 
   PLACES_DATA, 
+  CURATED_PLACES,
   BackendPlace, 
   calculateHaversineDistanceKm, 
   checkIsOpenNow 
@@ -41,8 +42,10 @@ export interface RecommendedPlaceResponse {
   matchScore: number;
   matchReasons: string[];
   scoreBreakdown: ScoreBreakdown;
-  source?: 'live' | 'demo';
+  source?: 'live' | 'demo' | 'curated';
   sourceName?: string;
+  provenance?: import('../types/places.js').PlaceProvenance;
+  confidence?: import('../types/places.js').DataConfidence;
   address?: string;
 }
 
@@ -365,19 +368,38 @@ export const getRecommendations = async (req: Request, res: Response) => {
   const openNow = body.preferences?.openNowOnly ?? (body.openNow !== undefined ? body.openNow : query.openNow);
   const isOpenNowFilter = openNow === true || openNow === 'true';
 
+  let userLat = 17.3616;
+  let userLon = 78.4747;
+  if (lat !== undefined || lon !== undefined) {
+    const parsedLat = parseFloat(String(lat));
+    const parsedLon = parseFloat(String(lon));
+    if (isNaN(parsedLat) || isNaN(parsedLon) || parsedLat < -90 || parsedLat > 90 || parsedLon < -180 || parsedLon > 180) {
+      return res.status(400).json({ error: 'Invalid numeric coordinates: lat must be between -90 and 90, lon between -180 and 180' });
+    }
+    userLat = parsedLat;
+    userLon = parsedLon;
+  }
   const limit = body.limit ?? query.limit;
-  const userLat = lat ? parseFloat(String(lat)) : 17.3616;
-  const userLon = lon ? parseFloat(String(lon)) : 78.4747;
-  const resultLimit = limit ? parseInt(String(limit), 10) : 10;
+  const resultLimit = limit ? Math.max(1, parseInt(String(limit), 10)) : 10;
 
   // Development logging
   if (process.env.NODE_ENV !== 'production') {
     console.log(`[Recommendation Engine API] Recalculating: interests=[${interests.join(', ')}] hours=${availableHours} budget=₹${budgetAmount} style=${travelStyle} pace=${travelPace} origin=(${userLat}, ${userLon})`);
   }
 
-  const candidatePool: BackendPlace[] = Array.isArray(body.candidatePlaces) && body.candidatePlaces.length > 0
-    ? body.candidatePlaces
-    : PLACES_DATA;
+  let candidatePool: BackendPlace[] = [];
+  if (Array.isArray(body.candidatePlaces) && body.candidatePlaces.length > 0) {
+    candidatePool = body.candidatePlaces;
+  } else {
+    // Location-safe candidate pool: match curated places within 35km first
+    const curatedMatches = CURATED_PLACES.filter(p => calculateHaversineDistanceKm(userLat, userLon, p.lat, p.lon) <= 35);
+    if (curatedMatches.length > 0) {
+      candidatePool = curatedMatches;
+    } else {
+      const isHyderabadArea = calculateHaversineDistanceKm(userLat, userLon, 17.3616, 78.4747) <= 35;
+      candidatePool = isHyderabadArea ? PLACES_DATA : [];
+    }
+  }
 
   // 1. Score all places
   let scoredPlaces: RecommendedPlaceResponse[] = candidatePool.map((place) => {

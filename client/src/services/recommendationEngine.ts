@@ -1,4 +1,6 @@
 import { Place, UserPreferences, RecommendedPlace, ScoreBreakdown } from '../types/travel';
+import { calculatePlaceWeatherSuitability } from './weatherImpactService';
+import { getApiUrl } from './apiConfig';
 
 // Parse duration strings like '1–2 hrs', '45 min' into numeric hours
 export function parseDurationHours(durationStr: string): number {
@@ -66,7 +68,8 @@ export function scorePlace(
   place: Place,
   userLat: number,
   userLon: number,
-  preferences: UserPreferences
+  preferences: UserPreferences,
+  weather?: import('../types/weather').WeatherData | null
 ): {
   matchScore: number;
   matchReasons: string[];
@@ -277,6 +280,15 @@ export function scorePlace(
   // =========================================================================
   // WEIGHTED COMPOSITE SCORE
   // =========================================================================
+  let weatherModifier = 0;
+  if (weather) {
+    const { scoreModifier, reason: wReason } = calculatePlaceWeatherSuitability(place, weather);
+    weatherModifier = scoreModifier;
+    if (wReason && Math.abs(weatherModifier) >= 4) {
+      reasons.push(wReason);
+    }
+  }
+
   const weightedTotal = 
     0.30 * interestScore +
     0.20 * distanceScore +
@@ -284,7 +296,8 @@ export function scorePlace(
     0.15 * timeFitScore +
     0.10 * budgetFitScore +
     0.10 * openStatusScore +
-    ((styleFitScore - 75) * 0.10);
+    ((styleFitScore - 75) * 0.10) +
+    weatherModifier;
 
   const matchScore = Math.min(99, Math.max(25, Math.round(weightedTotal)));
 
@@ -312,7 +325,8 @@ export function rankPlacesForUser(
   places: Place[],
   userLat: number,
   userLon: number,
-  preferences: UserPreferences
+  preferences: UserPreferences,
+  weather?: import('../types/weather').WeatherData | null
 ): RecommendedPlace[] {
   if (process.env.NODE_ENV !== 'production') {
     console.log(
@@ -323,7 +337,7 @@ export function rankPlacesForUser(
   }
 
   let scoredList: RecommendedPlace[] = places.map((place) => {
-    const scored = scorePlace(place, userLat, userLon, preferences);
+    const scored = scorePlace(place, userLat, userLon, preferences, weather);
     return {
       ...place,
       distanceKm: scored.distanceKm,
@@ -392,7 +406,7 @@ export async function fetchRecommendations(
       params.append('openNow', 'true');
     }
 
-    const res = await fetch(`/api/recommendations?${params.toString()}`);
+    const res = await fetch(getApiUrl(`/api/recommendations?${params.toString()}`));
     if (res.ok) {
       const data = await res.json();
       if (data.places && Array.isArray(data.places)) {

@@ -1,4 +1,5 @@
 import { GeoLocation, Place, TripRoute, UserPreferences, FoodPlace } from '../types/travel';
+import { getApiUrl } from './apiConfig';
 
 export interface ChatMessage {
   id: string;
@@ -35,7 +36,8 @@ export function formatAIContext(
   preferences: UserPreferences,
   tripRoute: TripRoute,
   discoveredPlaces: Place[] = [],
-  nearbyFoodPlaces: FoodPlace[] = []
+  nearbyFoodPlaces: FoodPlace[] = [],
+  weatherData?: import('../types/weather').WeatherData | null
 ) {
   const stops = tripRoute.stops || [];
   
@@ -180,6 +182,21 @@ export function formatAIContext(
         distanceKm: Number(l.distanceKm.toFixed(1)),
         fareDisplay: l.fare.fareDisplay
       }))
+    } : undefined,
+    weather: weatherData ? {
+      current: {
+        temperature: weatherData.current.temperature,
+        feelsLike: weatherData.current.feelsLike,
+        condition: weatherData.current.condition,
+        precipitationProbability: weatherData.current.precipitationProbability,
+        windSpeedKmh: weatherData.current.windSpeedKmh
+      },
+      hourlyForecastSummary: weatherData.hourlyForecast?.slice(0, 6).map((h) => ({
+        time: h.time,
+        temperature: h.temperature,
+        condition: h.condition,
+        precipitationProbability: h.precipitationProbability
+      }))
     } : undefined
   };
 }
@@ -204,7 +221,7 @@ export async function sendAIChatMessage(
       content: m.content
     }));
 
-    const response = await fetch('/api/ai/chat', {
+    const response = await fetch(getApiUrl('/api/ai/chat'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -250,7 +267,7 @@ export async function sendAIChatMessage(
  */
 export async function fetchAIStatus(): Promise<AIStatusInfo> {
   try {
-    const res = await fetch('/api/ai/status');
+    const res = await fetch(getApiUrl('/api/ai/status'));
     if (!res.ok) throw new Error('Status check failed');
     return await res.json();
   } catch {

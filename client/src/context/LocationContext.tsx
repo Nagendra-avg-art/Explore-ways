@@ -1,21 +1,26 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { GeoLocation, LocationStatus } from '../types/travel';
+import { getApiUrl } from '../services/apiConfig';
 
 interface LocationContextType {
-  location: GeoLocation;
+  location: GeoLocation; // Active destination (for full backward compatibility)
+  destination: GeoLocation; // Authoritative selected travel destination
+  currentLocation: GeoLocation | null; // Physical device GPS location (null if not granted)
   status: LocationStatus;
   errorMessage: string | null;
   detectLocation: () => Promise<void>;
   setManualLocation: (loc: GeoLocation) => void;
+  setDestination: (loc: GeoLocation) => void;
+  useCurrentLocationAsDestination: () => void;
   isLocationModalOpen: boolean;
   setIsLocationModalOpen: (open: boolean) => void;
 }
 
-const DEFAULT_LOCATION: GeoLocation = {
+const DEFAULT_DESTINATION: GeoLocation = {
   lat: 17.3616,
   lon: 78.4747,
   city: 'Hyderabad',
-  area: 'Charminar',
+  area: 'Old City / Charminar',
   state: 'Telangana',
   country: 'India',
   formatted: 'Near Charminar, Hyderabad',
@@ -25,21 +30,58 @@ const DEFAULT_LOCATION: GeoLocation = {
 const LocationContext = createContext<LocationContextType | undefined>(undefined);
 
 export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [location, setLocation] = useState<GeoLocation>(() => {
+  // Authoritative physical device location (from GPS)
+  const [currentLocation, setCurrentLocation] = useState<GeoLocation | null>(() => {
     try {
-      const cached = localStorage.getItem('smart_travel_location');
+      const cached = localStorage.getItem('smart_travel_current_gps');
+      if (cached) return JSON.parse(cached);
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+
+  // Authoritative selected travel destination
+  const [destination, setDestinationState] = useState<GeoLocation>(() => {
+    try {
+      const cached = localStorage.getItem('smart_travel_destination') || localStorage.getItem('smart_travel_location');
       if (cached) {
         return JSON.parse(cached);
       }
     } catch {
       // ignore
     }
-    return DEFAULT_LOCATION;
+    return DEFAULT_DESTINATION;
   });
 
   const [status, setStatus] = useState<LocationStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState<boolean>(false);
+
+  // Set selected destination
+  const setDestination = (loc: GeoLocation) => {
+    const updated: GeoLocation = {
+      ...loc,
+      isManual: true,
+      formatted: loc.formatted || (loc.area && loc.area !== loc.city ? `${loc.area}, ${loc.city}` : loc.city)
+    };
+    setDestinationState(updated);
+    setStatus('granted');
+    setErrorMessage(null);
+    localStorage.setItem('smart_travel_destination', JSON.stringify(updated));
+    localStorage.setItem('smart_travel_location', JSON.stringify(updated));
+    setIsLocationModalOpen(false);
+  };
+
+  const setManualLocation = (loc: GeoLocation) => {
+    setDestination(loc);
+  };
+
+  const useCurrentLocationAsDestination = () => {
+    if (currentLocation) {
+      setDestination(currentLocation);
+    }
+  };
 
   // Detect location via browser Geolocation API
   const detectLocation = async (): Promise<void> => {
@@ -57,37 +99,43 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
       async (position) => {
         const { latitude, longitude } = position.coords;
         try {
-          const res = await fetch(`/api/location/reverse?lat=${latitude}&lon=${longitude}`);
+          const res = await fetch(getApiUrl(`/api/location/reverse?lat=${latitude}&lon=${longitude}`));
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
 
           const detected: GeoLocation = {
             lat: latitude,
             lon: longitude,
-            city: data.city || 'Detected City',
-            area: data.area || 'Current Location',
+            city: data.city || 'Current Location',
+            area: data.area || 'GPS Location',
             state: data.state || '',
             country: data.country || 'India',
-            formatted: `Near ${data.area || data.city}, ${data.city}`,
+            formatted: data.formatted || `Near ${data.area || data.city}, ${data.city}`,
             fullAddress: data.fullAddress,
             isManual: false
           };
 
-          setLocation(detected);
-          setStatus('granted');
+          setCurrentLocation(detected);
+          localStorage.setItem('smart_travel_current_gps', JSON.stringify(detected));
+          
+          // Also set as active destination
+          setDestinationState(detected);
+          localStorage.setItem('smart_travel_destination', JSON.stringify(detected));
           localStorage.setItem('smart_travel_location', JSON.stringify(detected));
+          
+          setStatus('granted');
         } catch (err) {
           console.warn('Reverse geocoding error:', err);
-          // Fallback to coordinates
           const fallbackLoc: GeoLocation = {
             lat: latitude,
             lon: longitude,
-            city: 'Your City',
-            area: 'Local Area',
+            city: 'Current Location',
+            area: 'Device Coordinates',
             formatted: `GPS Location (${latitude.toFixed(3)}, ${longitude.toFixed(3)})`,
             isManual: false
           };
-          setLocation(fallbackLoc);
+          setCurrentLocation(fallbackLoc);
+          setDestinationState(fallbackLoc);
           setStatus('granted');
         }
       },
@@ -111,7 +159,6 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
             errorMsg = error.message || 'An unknown error occurred while detecting location.';
         }
         setErrorMessage(errorMsg);
-        // Open manual picker when location fails
         setIsLocationModalOpen(true);
       },
       {
@@ -122,27 +169,18 @@ export const LocationProvider: React.FC<{ children: ReactNode }> = ({ children }
     );
   };
 
-  const setManualLocation = (loc: GeoLocation) => {
-    const updated: GeoLocation = {
-      ...loc,
-      isManual: true,
-      formatted: `Near ${loc.area || loc.city}, ${loc.city}`
-    };
-    setLocation(updated);
-    setStatus('granted');
-    setErrorMessage(null);
-    localStorage.setItem('smart_travel_location', JSON.stringify(updated));
-    setIsLocationModalOpen(false);
-  };
-
   return (
     <LocationContext.Provider
       value={{
-        location,
+        location: destination, // Points directly to authoritative destination
+        destination,
+        currentLocation,
         status,
         errorMessage,
         detectLocation,
         setManualLocation,
+        setDestination,
+        useCurrentLocationAsDestination,
         isLocationModalOpen,
         setIsLocationModalOpen,
       }}
@@ -159,3 +197,4 @@ export const useLocation = (): LocationContextType => {
   }
   return context;
 };
+

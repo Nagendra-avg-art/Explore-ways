@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Clock, IndianRupee, Sparkles, Check, ArrowRight, SlidersHorizontal } from 'lucide-react';
+import { Clock, Sparkles, Check, ArrowRight, SlidersHorizontal } from 'lucide-react';
 import { usePreferences } from '../../context/PreferencesContext';
 import { useLocation } from '../../context/LocationContext';
 import { usePlaces } from '../../context/PlacesContext';
@@ -17,11 +17,12 @@ interface PlanDayWidgetProps {
 
 export const PlanDayWidget: React.FC<PlanDayWidgetProps> = ({ onBuildPlan }) => {
   const { preferences, updatePreferences, setIsPreferencesModalOpen } = usePreferences();
-  const { location } = useLocation();
+  const { location, setIsLocationModalOpen } = useLocation();
   const { places } = usePlaces();
   const [planGenerated, setPlanGenerated] = useState<boolean>(false);
 
-  const availablePlaces = places && places.length > 0 ? places : DEMO_PLACES;
+  const isHyd = Math.abs(location.lat - 17.3616) < 0.25 && Math.abs(location.lon - 78.4747) < 0.25;
+  const availablePlaces = places && places.length > 0 ? places : (isHyd ? DEMO_PLACES : []);
 
   const topDayPlaces = useMemo(() => {
     return rankPlacesForUser(availablePlaces, location.lat, location.lon, preferences).slice(0, 3);
@@ -127,78 +128,45 @@ export const PlanDayWidget: React.FC<PlanDayWidgetProps> = ({ onBuildPlan }) => 
           </button>
         </div>
 
-        {/* Step 1: Available Time */}
-        <div className="space-y-3">
-          <label className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-slate-700">
-            <Clock className="w-4 h-4 text-sky-600" />
-            <span>1. How much time do you have? ({preferences.availableHours}h currently set)</span>
-          </label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            {timeOptions.map((opt) => {
-              const isSelected = selectedTime === opt.id;
-              return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => {
-                    updatePreferences({ availableHours: opt.hours });
-                    setPlanGenerated(false);
-                  }}
-                  className={`flex flex-col items-center justify-center p-3.5 rounded-2xl border text-center transition-all cursor-pointer min-h-[56px] ${
-                    isSelected
-                      ? 'bg-sky-600 text-white border-sky-600 shadow-sm scale-101 font-semibold'
-                      : 'bg-white hover:bg-slate-50 text-slate-800 border-slate-200 shadow-2xs'
-                  }`}
-                >
-                  <span className="text-sm font-bold">{opt.label}</span>
-                  <span className={`text-[11px] mt-0.5 ${isSelected ? 'text-sky-100' : 'text-slate-500'}`}>
-                    {opt.desc}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Step 2: Budget */}
-        <div className="space-y-3">
-          <label className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-slate-700">
-            <IndianRupee className="w-4 h-4 text-emerald-600" />
-            <span>2. What is your approximate budget? (₹{preferences.budgetAmount.toLocaleString()} currently set)</span>
-          </label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            {budgetOptions.map((opt) => {
-              const isSelected = selectedBudget === opt.id;
-              return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => {
-                    updatePreferences({ budgetAmount: opt.amount });
-                    setPlanGenerated(false);
-                  }}
-                  className={`flex flex-col items-center justify-center p-3.5 rounded-2xl border text-center transition-all cursor-pointer min-h-[56px] ${
-                    isSelected
-                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm scale-101 font-semibold'
-                      : 'bg-white hover:bg-slate-50 text-slate-800 border-slate-200 shadow-2xs'
-                  }`}
-                >
-                  <span className="text-base font-extrabold">{opt.label}</span>
-                  <span className={`text-[11px] mt-0.5 ${isSelected ? 'text-emerald-100' : 'text-slate-500'}`}>
-                    {opt.tag}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Step 3: Interests Multi-Select */}
+        {/* Step 1: Destination */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <label className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-slate-700">
-              <Sparkles className="w-4 h-4 text-amber-500" />
-              <span>3. What interests you most today? (Select multiple)</span>
+              <span className="w-5 h-5 rounded-full bg-sky-100 text-sky-800 text-[11px] font-black flex items-center justify-center">1</span>
+              <span>Choose Destination</span>
+            </label>
+            <button
+              type="button"
+              onClick={() => setIsLocationModalOpen(true)}
+              className="text-xs text-sky-600 hover:text-sky-700 font-semibold cursor-pointer underline"
+            >
+              Change Location
+            </button>
+          </div>
+          <div className="p-3.5 rounded-2xl bg-white border border-slate-200/90 flex items-center justify-between shadow-2xs">
+            <div className="flex items-center space-x-2.5">
+              <span className="text-xl">📍</span>
+              <div>
+                <span className="text-xs font-bold text-slate-900 block">{location.formatted}</span>
+                <span className="text-[11px] text-slate-500">All routes and travel times will be measured from this location</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsLocationModalOpen(true)}
+              className="px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
+            >
+              Switch City
+            </button>
+          </div>
+        </div>
+
+        {/* Step 2: Interests Multi-Select */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-slate-700">
+              <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-black flex items-center justify-center">2</span>
+              <span>Choose Interests</span>
             </label>
             <button
               type="button"
@@ -231,7 +199,101 @@ export const PlanDayWidget: React.FC<PlanDayWidgetProps> = ({ onBuildPlan }) => 
           </div>
         </div>
 
-        {/* Action Button: Sunset Orange */}
+        {/* Step 3: Available Time */}
+        <div className="space-y-3">
+          <label className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-slate-700">
+            <span className="w-5 h-5 rounded-full bg-sky-100 text-sky-800 text-[11px] font-black flex items-center justify-center">3</span>
+            <span>Choose Time ({preferences.availableHours}h currently set)</span>
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            {timeOptions.map((opt) => {
+              const isSelected = selectedTime === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    updatePreferences({ availableHours: opt.hours });
+                    setPlanGenerated(false);
+                  }}
+                  className={`flex flex-col items-center justify-center p-3.5 rounded-2xl border text-center transition-all cursor-pointer min-h-[56px] ${
+                    isSelected
+                      ? 'bg-sky-600 text-white border-sky-600 shadow-sm scale-101 font-semibold'
+                      : 'bg-white hover:bg-slate-50 text-slate-800 border-slate-200 shadow-2xs'
+                  }`}
+                >
+                  <span className="text-sm font-bold">{opt.label}</span>
+                  <span className={`text-[11px] mt-0.5 ${isSelected ? 'text-sky-100' : 'text-slate-500'}`}>
+                    {opt.desc}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Step 4: Budget */}
+        <div className="space-y-3">
+          <label className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-slate-700">
+            <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-black flex items-center justify-center">4</span>
+            <span>Choose Budget (₹{preferences.budgetAmount.toLocaleString()} currently set)</span>
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            {budgetOptions.map((opt) => {
+              const isSelected = selectedBudget === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    updatePreferences({ budgetAmount: opt.amount });
+                    setPlanGenerated(false);
+                  }}
+                  className={`flex flex-col items-center justify-center p-3.5 rounded-2xl border text-center transition-all cursor-pointer min-h-[56px] ${
+                    isSelected
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm scale-101 font-semibold'
+                      : 'bg-white hover:bg-slate-50 text-slate-800 border-slate-200 shadow-2xs'
+                  }`}
+                >
+                  <span className="text-base font-extrabold">{opt.label}</span>
+                  <span className={`text-[11px] mt-0.5 ${isSelected ? 'text-emerald-100' : 'text-slate-500'}`}>
+                    {opt.tag}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Step 5: Suggested Places */}
+        {topDayPlaces.length > 0 && (
+          <div className="space-y-3">
+            <label className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-slate-700">
+              <span className="w-5 h-5 rounded-full bg-purple-100 text-purple-800 text-[11px] font-black flex items-center justify-center">5</span>
+              <span>Select Places ({topDayPlaces.length} recommended for your schedule)</span>
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {topDayPlaces.map((place, idx) => (
+                <div key={place.id} className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex flex-col justify-between space-y-2">
+                  <div className="flex items-start space-x-2">
+                    <span className="w-6 h-6 rounded-lg bg-sky-50 text-sky-700 text-xs font-bold flex items-center justify-center shrink-0">
+                      {idx + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs font-bold text-slate-900 block truncate">{place.name}</span>
+                      <span className="text-[10px] text-slate-500">{place.categoryLabel} · {place.distanceKm} km</span>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md inline-block self-start">
+                    {place.matchScore}% Profile Match
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Step 6: Build Trip Action Button */}
         <div className="pt-2 flex flex-col sm:flex-row items-center gap-4">
           <button
             type="button"
@@ -239,11 +301,11 @@ export const PlanDayWidget: React.FC<PlanDayWidgetProps> = ({ onBuildPlan }) => 
             className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm shadow-md shadow-orange-500/20 active:scale-98 transition-all duration-150 flex items-center justify-center space-x-2 cursor-pointer min-h-[48px]"
           >
             <Sparkles className="w-4 h-4" />
-            <span>Build My Custom Plan</span>
+            <span>6. Build Trip Plan</span>
             <ArrowRight className="w-4 h-4 ml-1" />
           </button>
           <span className="text-xs text-slate-500 text-center sm:text-left">
-            Routes, distance, and transport estimates will be automatically calculated.
+            Optimizes the itinerary timeline, travel legs, and transport estimates.
           </span>
         </div>
 

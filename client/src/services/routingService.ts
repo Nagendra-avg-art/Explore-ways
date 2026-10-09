@@ -9,6 +9,7 @@
  */
 
 import { Place, RouteLeg, TripRoute } from '../types/travel';
+import { getApiUrl } from './apiConfig';
 
 const EARTH_RADIUS_KM = 6371.0;
 
@@ -164,6 +165,8 @@ export function calculateTripRoute(
   if (stops.length === 0) {
     const emptySchedule = calculateItinerarySchedule([], [], '09:00', prefs.pace);
     const emptyFeasibility = calculateItineraryFeasibility(emptySchedule, prefs, preferredMode, []);
+    const emptyFareSummary = computeTripFareSummary([], preferredMode);
+    const emptyExplanation = generateItineraryExplanation(origin, [], [], prefs, preferredMode, emptyFeasibility, 0);
     return {
       origin,
       stops: [],
@@ -177,8 +180,11 @@ export function calculateTripRoute(
       isOptimized: false,
       distanceSavedKm: 0,
       selectedModeTimeDisplay: '0 min',
+      fareSummary: emptyFareSummary,
+      selectedModeFareDisplay: emptyFareSummary.totalFareDisplay,
       schedule: emptySchedule,
       feasibility: emptyFeasibility,
+      itineraryExplanation: emptyExplanation,
     };
   }
 
@@ -225,6 +231,8 @@ export function calculateTripRoute(
       toLon: stop.lon,
       distanceKm: legDistance,
       estimatedTravelTimeMin: legTravelTime,
+      transportMode: preferredMode,
+      transportLabel: preferredMode.toUpperCase(),
       transportComparison: transportComp,
       fareComparison: legFares,
       modeEstimates: modeEst,
@@ -281,7 +289,7 @@ export function calculateTripRoute(
     distanceSavedKm: Math.round(distanceSavedKm * 10) / 10,
     selectedModeTimeDisplay,
     fareSummary,
-    selectedModeFareDisplay: fareSummary.totalFareDisplay,
+    selectedModeFareDisplay: preferredMode === 'bus' ? 'Fare unavailable' : fareSummary.totalFareDisplay,
     schedule,
     feasibility,
     itineraryExplanation,
@@ -402,7 +410,7 @@ export async function fetchRealRoadDirections(
   const profile = mode === 'walk' ? 'walking' : 'driving';
 
   try {
-    const res = await fetch(`/api/routes/directions?coordinates=${encodeURIComponent(coordStr)}&mode=${profile}`);
+    const res = await fetch(getApiUrl(`/api/routes/directions?coordinates=${encodeURIComponent(coordStr)}&mode=${profile}`));
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`);
     }

@@ -11,16 +11,18 @@ import {
   MapView,
   TripRouteView,
   AIGuideView,
-  FoodExplorerView
+  FoodExplorerView,
+  WeatherCard
 } from './components';
+import { WeatherProvider, useWeather } from './context/WeatherContext';
 import { FoodProvider } from './context/FoodContext';
 import { LocationProvider, useLocation } from './context/LocationContext';
 import { PlacesProvider, usePlaces } from './context/PlacesContext';
 import { PreferencesProvider, usePreferences } from './context/PreferencesContext';
 import { TripProvider, useTrip } from './context/TripContext';
-import { DEMO_PLACES } from './data/demoPlaces';
 import { CategoryId, Place } from './types/travel';
 import { scorePlace } from './services/recommendationEngine';
+import { getApiUrl } from './services/apiConfig';
 import { 
   MapPin, 
   Route, 
@@ -55,11 +57,15 @@ function MainAppContent() {
     location, 
     status: locationStatus, 
     detectLocation, 
+    setDestination,
     setIsLocationModalOpen 
   } = useLocation();
 
   // Preferences Context
   const { preferences, setIsPreferencesModalOpen } = usePreferences();
+
+  // Weather Context (Phase 13)
+  const { weather } = useWeather();
 
   // Trip Context
   const { 
@@ -74,7 +80,6 @@ function MainAppContent() {
     places: discoveredPlaces,
     isLiveDiscovery,
     isLoading: isLoadingNearby,
-    sourceName,
     totalFound,
     discoverNearbyPlaces,
     useDemoFallback,
@@ -82,46 +87,117 @@ function MainAppContent() {
     registerPlace
   } = usePlaces();
 
-  // Active candidate places (Live OSM or Demo Fallback, including any viewed food POIs)
+  // Active candidate places (Live OSM or Location-Safe Demo Seed, including any viewed food POIs)
+  // Active candidate places strictly for the current destination
   const availablePlaces = useMemo(() => {
-    const base = discoveredPlaces.length > 0 ? discoveredPlaces : DEMO_PLACES;
-    const map = new Map<string, Place>();
-    base.forEach(p => map.set(p.id, p));
-    Object.values(knownPlacesMap).forEach(p => map.set(p.id, p));
-    return Array.from(map.values());
-  }, [discoveredPlaces, knownPlacesMap]);
+    return discoveredPlaces;
+  }, [discoveredPlaces]);
 
   // Discovery state
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [destinationSuggestions, setDestinationSuggestions] = useState<import('./types/travel').GeoLocation[]>([]);
+  const [isSearchingDestinations, setIsSearchingDestinations] = useState<boolean>(false);
+  const [showSuggestionsDropdown, setShowSuggestionsDropdown] = useState<boolean>(false);
   const savedPlaceIds = tripPlaceIds;
+  
+  // Destination search debounce
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setDestinationSuggestions([]);
+      setShowSuggestionsDropdown(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearchingDestinations(true);
+      try {
+        const res = await fetch(getApiUrl(`/api/location/search?q=${encodeURIComponent(q)}`));
+        if (res.ok) {
+          const data = await res.json();
+          const results = data.results || [];
+          setDestinationSuggestions(results);
+          setShowSuggestionsDropdown(results.length > 0);
+        }
+      } catch (err) {
+        console.warn('Hero destination search error:', err);
+      } finally {
+        setIsSearchingDestinations(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const handleSelectDestination = (dest: import('./types/travel').GeoLocation) => {
+    setDestination(dest);
+    setSearchQuery('');
+    setDestinationSuggestions([]);
+    setShowSuggestionsDropdown(false);
+  };
   
   // Modal state
   const [selectedPlaceForModal, setSelectedPlaceForModal] = useState<Place | null>(null);
   const [selectedPlaceForMapId, setSelectedPlaceForMapId] = useState<string | null>(null);
+  const [aiInitialPrompt, setAiInitialPrompt] = useState<string>('');
 
-  // Backend Health Ping
+
+  // Dynamic Application Connectivity Ping (Real-time Online/Offline detection)
   useEffect(() => {
-    fetch('/api/health')
-      .then((res) => {
+    let isMounted = true;
+
+    const checkConnectivity = async () => {
+      if (!navigator.onLine) {
+        if (isMounted) {
+          setError('Network offline');
+          setLoading(false);
+        }
+        return;
+      }
+      try {
+        const res = await fetch(getApiUrl('/api/health'));
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((data) => {
-        setHealth(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err.message || 'Could not connect to backend');
-        setLoading(false);
-      });
+        const data = await res.json();
+        if (isMounted) {
+          setHealth(data);
+          setError(null);
+          setLoading(false);
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          setError(err.message || 'Could not connect to travel services');
+          setLoading(false);
+        }
+      }
+    };
+
+    checkConnectivity();
+    const interval = setInterval(checkConnectivity, 30000); // 30-second heartbeat ping
+
+    const handleOnline = () => checkConnectivity();
+    const handleOffline = () => {
+      if (isMounted) {
+        setError('Network offline');
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   // Filtered and Ranked Places for Home feed
   const filteredPlaces = useMemo(() => {
     // Score all places using multi-factor recommendation engine
     let places = availablePlaces.map((place) => {
-      const scored = scorePlace(place, location.lat, location.lon, preferences);
+      const scored = scorePlace(place, location.lat, location.lon, preferences, weather);
       return {
         ...place,
         distanceKm: scored.distanceKm,
@@ -155,11 +231,11 @@ function MainAppContent() {
     // Sort descending by matchScore
     places.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
     return places;
-  }, [availablePlaces, selectedCategory, searchQuery, location, preferences]);
+  }, [availablePlaces, selectedCategory, searchQuery, location, preferences, weather]);
 
 
   const toggleSavePlace = (placeId: string) => {
-    const place = knownPlacesMap[placeId] || availablePlaces.find((p) => p.id === placeId) || DEMO_PLACES.find((p) => p.id === placeId);
+    const place = knownPlacesMap[placeId] || availablePlaces.find((p) => p.id === placeId);
     if (place) {
       toggleTripPlace(place);
     }
@@ -333,9 +409,9 @@ function MainAppContent() {
               </button>
             </div>
 
-            {/* Search Bar */}
-            <div className="mt-8 max-w-xl mx-auto">
-              <div className="relative flex items-center shadow-xs rounded-2xl bg-white border border-slate-200 focus-within:border-sky-500 focus-within:ring-3 focus-within:ring-sky-100 transition-all p-1.5">
+            {/* Search Bar with Destination Auto-Complete */}
+            <div className="mt-8 max-w-xl mx-auto relative">
+              <div className="relative flex items-center shadow-xs rounded-2xl bg-white border border-slate-200 focus-within:border-sky-500 focus-within:ring-3 focus-within:ring-sky-100 transition-all p-1.5 z-20">
                 <div className="pl-3.5 text-slate-400">
                   <Search className="w-5 h-5 text-sky-600" />
                 </div>
@@ -343,19 +419,109 @@ function MainAppContent() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Where do you want to explore? (e.g., Charminar, Biryani, Temples...)"
+                  onFocus={() => {
+                    if (destinationSuggestions.length > 0) setShowSuggestionsDropdown(true);
+                  }}
+                  placeholder="Search destination (e.g. Tirupati, Rajahmundry) or local places..."
                   className="w-full px-3 py-2 text-sm text-slate-800 placeholder-slate-400 bg-transparent focus:outline-none font-medium"
                 />
+                {isSearchingDestinations && (
+                  <div className="pr-2">
+                    <Loader2 className="w-4 h-4 text-sky-600 animate-spin" />
+                  </div>
+                )}
                 {searchQuery && (
                   <button
-                    onClick={() => setSearchQuery('')}
-                    className="mr-2 text-xs font-semibold text-slate-400 hover:text-slate-600 px-2 py-1"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setShowSuggestionsDropdown(false);
+                    }}
+                    className="mr-2 text-xs font-semibold text-slate-400 hover:text-slate-600 px-2 py-1 cursor-pointer"
                   >
                     Clear
                   </button>
                 )}
               </div>
+
+              {/* Destination Suggestions Autocomplete Dropdown */}
+              {showSuggestionsDropdown && destinationSuggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden z-30 text-left animate-fadeIn">
+                  <div className="p-2.5 bg-sky-50/70 border-b border-slate-100 flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-sky-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-sky-600" />
+                      <span>Switch Destination to:</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowSuggestionsDropdown(false)}
+                      className="text-[11px] text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <div className="max-h-56 overflow-y-auto p-1 divide-y divide-slate-50">
+                    {destinationSuggestions.map((dest, idx) => (
+                      <button
+                        key={`${dest.city}-${dest.lat}-${idx}`}
+                        type="button"
+                        onClick={() => handleSelectDestination(dest)}
+                        className="w-full p-2.5 rounded-xl hover:bg-sky-50 text-left transition-colors flex items-center justify-between group cursor-pointer"
+                      >
+                        <div className="flex items-center space-x-2.5">
+                          <div className="w-7 h-7 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-xs shrink-0 group-hover:bg-sky-600 group-hover:text-white transition-colors">
+                            📍
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold text-slate-900 group-hover:text-sky-700 block">
+                              {dest.city}
+                            </span>
+                            <span className="text-[11px] text-slate-500 block truncate max-w-xs">
+                              {dest.formatted || `${dest.area}, ${dest.state}`}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-xs font-semibold text-sky-600 group-hover:translate-x-0.5 transition-transform">
+                          Select →
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Popular Destination Chips */}
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5 text-xs text-slate-500">
+                <span className="font-semibold text-slate-400 text-[11px]">Popular Hubs:</span>
+                {[
+                  { city: 'Tirupati', lat: 13.6288, lon: 79.4192, state: 'Andhra Pradesh', area: 'Tirumala / City Center', formatted: 'Tirupati, Andhra Pradesh' },
+                  { city: 'Rajahmundry', lat: 17.0005, lon: 81.8040, state: 'Andhra Pradesh', area: 'Godavari Ghats / Danavaipeta', formatted: 'Rajahmundry, Andhra Pradesh' },
+                  { city: 'Hyderabad', lat: 17.3616, lon: 78.4747, state: 'Telangana', area: 'Old City / Charminar', formatted: 'Near Charminar, Hyderabad' },
+                  { city: 'Visakhapatnam', lat: 17.6868, lon: 83.2185, state: 'Andhra Pradesh', area: 'RK Beach / Rushikonda', formatted: 'Visakhapatnam, Andhra Pradesh' },
+                  { city: 'Goa', lat: 15.4909, lon: 73.8278, state: 'Goa', area: 'Panaji / North Coast', formatted: 'Near Panaji, Goa' },
+                ].map((hub) => {
+                  const isActive = (location.city || '').toLowerCase() === hub.city.toLowerCase();
+                  return (
+                    <button
+                      key={hub.city}
+                      type="button"
+                      onClick={() => handleSelectDestination(hub)}
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-sky-600 text-white shadow-2xs'
+                          : 'bg-white hover:bg-sky-50 text-slate-700 border border-slate-200'
+                      }`}
+                    >
+                      {hub.city}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+          </section>
+
+          {/* WEATHER CONTEXT STRIP (Phase 13) */}
+          <section className="animate-fadeIn">
+            <WeatherCard />
           </section>
 
           {/* POPULAR CATEGORIES */}
@@ -383,12 +549,12 @@ function MainAppContent() {
                   isLiveDiscovery ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'
                 }`}>
                   <Radio className="w-3 h-3 animate-pulse" />
-                  <span>{isLiveDiscovery ? 'LIVE POI DISCOVERY' : 'CURATED DEMO HUB'}</span>
+                  <span>{isLiveDiscovery ? 'LIVE ATTRACTIONS' : 'CURATED HIGHLIGHTS'}</span>
                 </span>
                 <span className="font-medium">
                   {isLiveDiscovery 
-                    ? `Discovered ${totalFound} real attractions around ${location.city} via ${sourceName}.`
-                    : `Showing curated demonstration highlights for ${location.city}. Allow GPS to discover real nearby places around your current position.`
+                    ? `Showing ${totalFound} attractions around ${location.city}.`
+                    : `Showing curated highlights for ${location.city}. Allow location access to discover places near you.`
                   }
                 </span>
               </div>
@@ -397,7 +563,7 @@ function MainAppContent() {
                 {isLoadingNearby ? (
                   <div className="flex items-center space-x-1.5 text-slate-500 font-semibold text-[11px] px-2 py-1">
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-600" />
-                    <span>Querying OpenStreetMap...</span>
+                    <span>Finding nearby places...</span>
                   </div>
                 ) : isLiveDiscovery ? (
                   <>
@@ -415,7 +581,7 @@ function MainAppContent() {
                       onClick={useDemoFallback}
                       className="px-2.5 py-1 rounded-lg bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-800 font-semibold text-[11px] transition-all cursor-pointer"
                     >
-                      Switch to Demo
+                      View Curated
                     </button>
                   </>
                 ) : (
@@ -425,7 +591,7 @@ function MainAppContent() {
                     className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] flex items-center space-x-1 transition-all cursor-pointer shadow-2xs"
                   >
                     <MapPin className="w-3 h-3" />
-                    <span>Use Real GPS</span>
+                    <span>Find Near Me</span>
                   </button>
                 )}
               </div>
@@ -440,7 +606,7 @@ function MainAppContent() {
                   <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
                   <span>
                     {selectedCategory === 'all' 
-                      ? `AI Personalized Matches (${getStyleEmoji()} • ${preferences.availableHours}h)`
+                      ? `Personalized for You (${getStyleEmoji()} • ${preferences.availableHours}h)`
                       : 'Category Discovery'}
                   </span>
                 </span>
@@ -450,7 +616,7 @@ function MainAppContent() {
               </div>
               <div className="flex items-center space-x-2 text-xs text-slate-500">
                 <Info className="w-3.5 h-3.5 text-sky-500" />
-                <span>Current Hub: {location.formatted}</span>
+                <span>Location: {location.formatted}</span>
               </div>
             </div>
 
@@ -560,7 +726,10 @@ function MainAppContent() {
 
       {/* TAB 5: AI GUIDE */}
       {activeTab === 'ai' && (
-        <AIGuideView />
+        <AIGuideView
+          initialPrompt={aiInitialPrompt}
+          onPromptHandled={() => setAiInitialPrompt('')}
+        />
       )}
 
       {/* TAB 6: MY TRIP ROUTE & ITINERARY */}
@@ -569,6 +738,11 @@ function MainAppContent() {
           onViewPlaceDetails={(p) => setSelectedPlaceForModal(p)}
           onNavigateToMap={() => setActiveTab('map')}
           onExploreMore={() => setActiveTab('explore')}
+          onNavigateToFood={() => setActiveTab('food')}
+          onNavigateToAI={(initialPrompt) => {
+            setAiInitialPrompt(initialPrompt || '');
+            setActiveTab('ai');
+          }}
         />
       )}
 
@@ -601,15 +775,17 @@ function MainAppContent() {
 export default function App() {
   return (
     <LocationProvider>
-      <PlacesProvider>
-        <PreferencesProvider>
-          <TripProvider>
-            <FoodProvider>
-              <MainAppContent />
-            </FoodProvider>
-          </TripProvider>
-        </PreferencesProvider>
-      </PlacesProvider>
+      <WeatherProvider>
+        <PlacesProvider>
+          <PreferencesProvider>
+            <TripProvider>
+              <FoodProvider>
+                <MainAppContent />
+              </FoodProvider>
+            </TripProvider>
+          </PreferencesProvider>
+        </PlacesProvider>
+      </WeatherProvider>
     </LocationProvider>
   );
 }

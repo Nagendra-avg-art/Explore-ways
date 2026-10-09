@@ -1,15 +1,16 @@
 // server/src/services/foodService.ts
 // Service handling food POI discovery, Nominatim dining integration, and caching
+// ₹0-First Architecture: Honest photography (never assign random stock food images)
 
 import { BackendFoodPlace, FoodCategory } from '../types/places.js';
-import { DEMO_FOOD_PLACES } from '../data/demo/demoFoodPlaces.js';
 import { calculateHaversineDistanceKm, checkIsOpenNow } from '../utils/geoUtils.js';
 
 const nearbyFoodCache = new Map<string, { timestamp: number; data: any }>();
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
- * Discovers nearby dining options using OpenStreetMap Nominatim with curated fallback
+ * Discovers nearby dining options using OpenStreetMap Nominatim with strict data trust
+ * Zero fake stock photos; clean neutral placeholder on client if no photo verified.
  */
 export async function discoverNearbyFoodPlaces(
   userLat: number,
@@ -45,7 +46,7 @@ export async function discoverNearbyFoodPlaces(
 
     const nomRes = await fetch(nominatimUrl, {
       headers: {
-        'User-Agent': 'SmartTravelCompanion/1.0 (academic-project)',
+        'User-Agent': 'SmartTravelCompanion/1.0 (academic-project; mailto:contact@smarttravel.local)',
         'Accept-Language': 'en'
       },
       signal: controller.signal
@@ -70,7 +71,7 @@ export async function discoverNearbyFoodPlaces(
           if (seenKeys.has(normKey)) continue;
           seenKeys.add(normKey);
 
-          const addressParts = item.display_name.split(',');
+          const addressParts = (item.display_name || '').split(',');
           const address = addressParts.slice(1, 3).map((s: string) => s.trim()).filter(Boolean).join(', ') || undefined;
 
           // Categorize food place
@@ -104,6 +105,9 @@ export async function discoverNearbyFoodPlaces(
 
           liveFoodPlaces.push({
             id: `osm-food-${item.place_id || item.osm_id}`,
+            internalId: `osm-food-${item.place_id || item.osm_id}`,
+            provider: 'osm',
+            providerPlaceId: String(item.place_id || item.osm_id),
             name,
             category: 'food',
             categoryLabel: '🍴 Dining',
@@ -114,7 +118,7 @@ export async function discoverNearbyFoodPlaces(
             distanceKm,
             travelTimeMin,
             visitDuration: fCat === 'cafe' ? '30–45 min' : '45–60 min',
-            imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80',
+            imageUrl: '', // Clean empty image - NEVER assign random stock photos!
             shortDescription: `Authentic ${fCatLabel} dining discovered near your active coordinates.`,
             fullDescription: item.display_name,
             whyRecommended: `Discovered ~${distanceKm.toFixed(1)} km from your current location.`,
@@ -122,6 +126,9 @@ export async function discoverNearbyFoodPlaces(
             tags: [fCatLabel, 'Nearby Dining'],
             source: 'live',
             sourceName: 'Live OpenStreetMap data',
+            provenance: 'osm',
+            confidence: 'MEDIUM',
+            verified: false,
             address,
             priceLevel: 'unavailable',
             priceLevelDisplay: 'Price not available',
@@ -135,12 +142,12 @@ export async function discoverNearbyFoodPlaces(
         }
       }
     }
-  } catch (nomErr: any) {
-    console.warn('[Food API] Nominatim food query failed or timed out:', nomErr?.message);
+  } catch (nomErr: unknown) {
+    console.warn('[Food API] Nominatim food query failed or timed out:', (nomErr as Error)?.message);
   }
 
-  // TIER 2: If live places found >= 3, return them sorted by distance
-  if (liveFoodPlaces.length >= 3) {
+  // TIER 2: If live places found, return them sorted by distance
+  if (liveFoodPlaces.length >= 1) {
     liveFoodPlaces.sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
 
     let filtered = liveFoodPlaces;
@@ -152,7 +159,7 @@ export async function discoverNearbyFoodPlaces(
       success: true,
       isLive: true,
       source: 'osm-live',
-      sourceName: 'Live OpenStreetMap data',
+      sourceName: 'Live OpenStreetMap dining data',
       origin: { lat: userLat, lon: userLon },
       radiusMeters: searchRadius,
       total: filtered.length,
@@ -163,45 +170,16 @@ export async function discoverNearbyFoodPlaces(
     return resultData;
   }
 
-  // TIER 3: Curated Demo Fallback with distance recalculation
-  let demoFallback = DEMO_FOOD_PLACES.map((p) => {
-    const dist = calculateHaversineDistanceKm(userLat, userLon, p.lat, p.lon);
-    const isOpen = checkIsOpenNow(p);
-    return {
-      ...p,
-      distanceKm: dist,
-      travelTimeMin: Math.max(3, Math.round(dist * 2.5 + 3)),
-      isOpenNow: isOpen,
-      recommendationReason: `Good match because it is ${isOpen ? 'open now, ' : ''}within ${dist.toFixed(1)} km, and fits your budget.`,
-      source: 'demo' as const,
-      sourceName: 'Demo data'
-    };
-  });
-
-  // Filter demo fallback by category
-  if (categoryFilter && categoryFilter !== 'all') {
-    if (categoryFilter === 'budget') {
-      demoFallback = demoFallback.filter((p) => p.priceLevel === 'budget');
-    } else {
-      demoFallback = demoFallback.filter((p) => p.foodCategory === categoryFilter);
-    }
-  }
-
-  // Filter demo fallback by open now
-  if (isOpenNowFilter) {
-    demoFallback = demoFallback.filter((p) => p.isOpenNow === true);
-  }
-
-  demoFallback.sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
-
+  // DATA TRUST RULE: If no live dining POIs discovered, return clean empty state
+  // NEVER silently substitute unrelated Hyderabad restaurants for other locations!
   return {
     success: true,
     isLive: false,
-    source: 'demo',
-    sourceName: 'Demo data',
+    source: 'none',
+    sourceName: 'No dining POIs discovered nearby',
     origin: { lat: userLat, lon: userLon },
     radiusMeters: searchRadius,
-    total: demoFallback.length,
-    places: demoFallback
+    total: 0,
+    places: []
   };
 }

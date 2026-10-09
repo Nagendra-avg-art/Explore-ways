@@ -26,23 +26,31 @@ import {
   fetchAIStatus, 
   AIStatusInfo 
 } from '../../services/aiGuideService';
+import { useWeather } from '../../context/WeatherContext';
 
 const DEFAULT_SUGGESTIONS = [
-  'What should I visit first?',
-  'Why is this recommended?',
+  'Where should I go first?',
+  'How much will this trip cost?',
+  'Is walking a good option?',
+  'Will weather affect my trip?',
+  'Can I add another place?',
   'What should I eat nearby?',
   'Where can I get vegetarian food?',
-  'Can I fit another place?',
-  "What's the cheapest option?",
   'Summarize my itinerary.'
 ];
 
-export const AIGuideView: React.FC = () => {
+interface AIGuideViewProps {
+  initialPrompt?: string;
+  onPromptHandled?: () => void;
+}
+
+export const AIGuideView: React.FC<AIGuideViewProps> = ({ initialPrompt, onPromptHandled }) => {
   const { location } = useLocation();
   const { preferences } = usePreferences();
   const { tripRoute } = useTrip();
   const { places: discoveredPlaces } = usePlaces();
   const { foodPlaces } = useFood();
+  const { weather } = useWeather();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState<string>('');
@@ -65,12 +73,12 @@ export const AIGuideView: React.FC = () => {
       
       const welcomeContent = stopCount > 0
         ? `Hello! I'm your **Local Travel Guide** for **${city}**.\n\n` +
-          `[APPLICATION DATA] You currently have **${stopCount} stop(s)** scheduled in your trip (` +
+          `You currently have **${stopCount} stop(s)** scheduled in your trip (` +
           tripRoute.stops.map((s: { name: string }) => s.name).join(', ') + 
-          `). I have your complete route, transport options, fares, and timeline loaded.\n\n` +
+          `). I have your complete route, transport options, fares, and timeline ready.\n\n` +
           `How can I help with your trip today?`
         : `Hello! I'm your **Local Travel Guide** for **${city}**.\n\n` +
-          `I can help you discover nearby places, explain recommendations, estimate costs, and optimize your schedule.\n\n` +
+          `I can help you discover nearby places, explain recommendations, estimate costs, and plan your day.\n\n` +
           `How can I help with your trip today?`;
 
       setMessages([
@@ -90,6 +98,15 @@ export const AIGuideView: React.FC = () => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
+
+  // Handle incoming initial prompt from other views (e.g., My Trip)
+  useEffect(() => {
+    if (initialPrompt && initialPrompt.trim()) {
+      const promptToRun = initialPrompt.trim();
+      if (onPromptHandled) onPromptHandled();
+      handleSendMessage(promptToRun);
+    }
+  }, [initialPrompt]);
 
   const handleSendMessage = async (textToSend?: string) => {
     const text = (textToSend || inputValue).trim();
@@ -112,7 +129,8 @@ export const AIGuideView: React.FC = () => {
         preferences,
         tripRoute,
         discoveredPlaces,
-        foodPlaces
+        foodPlaces,
+        weather
       );
 
       const response = await sendAIChatMessage(
@@ -137,7 +155,7 @@ export const AIGuideView: React.FC = () => {
       const errorMessage: ChatMessage = {
         id: `err-${Date.now()}`,
         role: 'assistant',
-        content: `[APPLICATION DATA] I am temporarily having trouble reaching the travel intelligence service. However, your trip data remains safe and you can view all stops on the Map or My Trip tab.`,
+        content: `I am temporarily having trouble reaching the travel assistant service. However, your trip data remains safe and you can view all stops on the Map or My Trip tab.`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         source: 'grounded-fallback'
       };
@@ -184,7 +202,7 @@ export const AIGuideView: React.FC = () => {
             badge = (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-200 mr-1.5">
                 <ShieldCheck className="w-3 h-3 text-sky-600" />
-                APPLICATION DATA
+                Trip Record
               </span>
             );
             processedLine = processedLine.replace('[APPLICATION DATA]', '').trim();
@@ -192,7 +210,7 @@ export const AIGuideView: React.FC = () => {
             badge = (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 mr-1.5">
                 <Clock className="w-3 h-3 text-amber-600" />
-                ESTIMATE
+                Estimated
               </span>
             );
             processedLine = processedLine.replace('[ESTIMATE]', '').trim();
@@ -200,7 +218,7 @@ export const AIGuideView: React.FC = () => {
             badge = (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200 mr-1.5">
                 <Info className="w-3 h-3 text-purple-600" />
-                GENERAL INFO
+                Guide Note
               </span>
             );
             processedLine = processedLine.replace('[GENERAL INFORMATION]', '').trim();
@@ -392,7 +410,7 @@ export const AIGuideView: React.FC = () => {
                     <span>{message.timestamp}</span>
                     {!isUser && message.source && (
                       <span className="capitalize text-slate-600">
-                        • {message.source === 'gemini' ? 'Gemini 2.5' : 'Grounded Engine'}
+                        • {message.source === 'gemini' ? 'AI Guide' : 'Travel Guide'}
                       </span>
                     )}
                   </div>
@@ -476,9 +494,9 @@ export const AIGuideView: React.FC = () => {
               )}
             </button>
           </form>
-          <div className="flex items-center justify-between mt-2 px-1 text-[10px] text-slate-600">
-            <span>Grounded in active trip data · Enter to submit</span>
-            <span>Security: Zero frontend API keys</span>
+          <div className="flex items-center justify-between mt-2 px-1 text-[10px] text-slate-500">
+            <span>Grounded in your trip plan and local places</span>
+            <span>Press Enter to send</span>
           </div>
         </div>
       </div>

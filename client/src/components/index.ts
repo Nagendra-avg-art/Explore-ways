@@ -26,3 +26,6 @@ export { PlanDayWidget } from './itinerary/PlanDayWidget';
 
 // AI Guide Components
 export { AIGuideView } from './ai-guide/AIGuideView';
+
+// Weather-Aware Travel Intelligence Components (Phase 13)
+export { WeatherCard, HourlyWeather, WeatherTripAlert } from './weather';

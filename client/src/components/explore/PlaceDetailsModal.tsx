@@ -38,6 +38,12 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
   onViewOnMap,
 }) => {
   const { location } = useLocation();
+  const [imageError, setImageError] = React.useState(false);
+
+  // Reset imageError when place changes
+  useEffect(() => {
+    setImageError(false);
+  }, [place?.id]);
 
   // Close on Escape key press & prevent background scroll
   useEffect(() => {
@@ -63,6 +69,23 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
   const distanceKm = calculateHaversineDistanceKm(location.lat, location.lon, place.lat, place.lon);
   const routeOptions = estimateTransportModes(distanceKm);
 
+  const getCategoryEmoji = (cat: string) => {
+    switch (cat) {
+      case 'temples': return '🛕';
+      case 'history': return '🏛️';
+      case 'nature': return '🌊';
+      case 'food': return '🍴';
+      case 'architecture': return '🏗️';
+      case 'cafes': return '☕';
+      case 'shopping': return '🛍️';
+      case 'photography': return '📸';
+      case 'culture': return '🎭';
+      default: return '📍';
+    }
+  };
+
+  const hasValidPhoto = Boolean(place.imageUrl && place.imageUrl.trim().length > 0 && !imageError);
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-200">
       
@@ -82,16 +105,31 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
       >
         
         {/* ============================================================== */}
-        {/* MODAL HEADER WITH HIGH-RES PHOTOGRAPHY */}
+        {/* MODAL HEADER WITH PHOTOGRAPHY OR CLEAN PLACEHOLDER */}
         {/* ============================================================== */}
         <div className="relative h-64 sm:h-72 w-full bg-slate-100 shrink-0">
-          <img
-            src={place.imageUrl}
-            alt={place.name}
-            className="w-full h-full object-cover"
-          />
+          {hasValidPhoto ? (
+            <img
+              src={place.imageUrl}
+              alt={place.name}
+              onError={() => setImageError(true)}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-slate-800 via-slate-900 to-sky-950 flex flex-col items-center justify-center p-6 text-center select-none">
+              <div className="w-20 h-20 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-4xl mb-3 shadow-lg">
+                {getCategoryEmoji(place.category)}
+              </div>
+              <span className="text-sm font-bold text-white/90">
+                {place.categoryLabel || 'Local Attraction'}
+              </span>
+              <span className="text-xs text-white/60 mt-0.5">
+                Verified Location · {place.address || location.city}
+              </span>
+            </div>
+          )}
           {/* Subtle gradient overlay for text readability */}
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-black/30" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/20 to-black/30 pointer-events-none" />
 
           {/* Top Bar with Category, Address & Close Button */}
           <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
@@ -102,11 +140,11 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
               {place.source === 'live' ? (
                 <span className="bg-emerald-600/90 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md flex items-center space-x-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                  <span>Live POI</span>
+                  <span>Live Location</span>
                 </span>
               ) : (
                 <span className="bg-amber-500/90 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-md">
-                  Demo Hub
+                  Curated
                 </span>
               )}
             </div>
@@ -132,7 +170,7 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
                   ) : null}
                 </div>
               ) : (
-                <span className="text-white/70 font-medium">Unrated (OpenStreetMap Live)</span>
+                <span className="text-white/70 font-medium">Unrated · Live location</span>
               )}
             </div>
             <h2 id="modal-place-title" className="text-2xl sm:text-3xl font-extrabold tracking-tight">
@@ -172,7 +210,7 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
                     <Sparkles className="w-4 h-4 fill-white" />
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Recommendation Engine</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">Match Breakdown</span>
                     <h4 className="text-sm font-extrabold text-slate-900">{place.matchScore}% Match for Your Travel Profile</h4>
                   </div>
                 </div>
@@ -400,8 +438,41 @@ export const PlaceDetailsModal: React.FC<PlaceDetailsModalProps> = ({
             </div>
 
             <p className="text-[10px] text-slate-400">
-              Transparent travel-time and fare estimates from your {location.isManual ? 'selected hub' : 'active GPS location'}. Auto &amp; Cab fares are distance-based approximations (not live booking quotes).
+              Estimated travel times and fares from your {location.isManual ? 'selected location' : 'current location'}. Auto and Cab fares are distance-based estimates.
             </p>
+
+            {/* Data Provenance, Official Website & Photo Attribution */}
+            <div className="pt-3 border-t border-slate-200/60 flex flex-wrap items-center justify-between text-[11px] text-slate-500 gap-2">
+              <div className="flex items-center space-x-2">
+                <span className="font-semibold text-slate-600">Provenance:</span>
+                <span>{place.sourceName || (place.provenance === 'curated' ? 'Verified Curated Heritage Record' : 'OpenStreetMap Live Data')}</span>
+                {place.confidence && (
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                    place.confidence === 'HIGH' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {place.confidence} CONFIDENCE
+                  </span>
+                )}
+              </div>
+
+              {place.website && (
+                <a
+                  href={place.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-bold text-sky-600 hover:text-sky-700 flex items-center space-x-1"
+                >
+                  <span>Official Website</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+
+              {place.photo?.attribution && (
+                <div className="w-full text-[10px] text-slate-400">
+                  Photo: {place.photo.attribution}
+                </div>
+              )}
+            </div>
           </div>
 
         </div>

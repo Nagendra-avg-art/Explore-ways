@@ -12,7 +12,7 @@ import {
   Sparkles,
   Route
 } from 'lucide-react';
-import { DEMO_PLACES, TRAVEL_CATEGORIES } from '../../data/demoPlaces';
+import { TRAVEL_CATEGORIES } from '../../data/demoPlaces';
 import { Place, CategoryId } from '../../types/travel';
 import { useLocation } from '../../context/LocationContext';
 import { useTrip } from '../../context/TripContext';
@@ -45,7 +45,7 @@ export const MapView: React.FC<MapViewProps> = ({
   } = useTrip();
 
   const activePlaces = React.useMemo(() => {
-    return places && places.length > 0 ? places : DEMO_PLACES;
+    return places || [];
   }, [places]);
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -485,11 +485,20 @@ export const MapView: React.FC<MapViewProps> = ({
               {/* Header with Close */}
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center space-x-3">
-                  <img
-                    src={selectedPlace.imageUrl}
-                    alt={selectedPlace.name}
-                    className="w-14 h-14 rounded-xl object-cover shrink-0 shadow-2xs"
-                  />
+                  {selectedPlace.imageUrl ? (
+                    <img
+                      src={selectedPlace.imageUrl}
+                      alt={selectedPlace.name}
+                      className="w-14 h-14 rounded-xl object-cover shrink-0 shadow-2xs"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-slate-100 to-sky-100 border border-slate-200 flex items-center justify-center text-2xl shrink-0 shadow-2xs">
+                      📍
+                    </div>
+                  )}
                   <div>
                     <div className="flex items-center space-x-1.5">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-sky-600 block">
@@ -497,11 +506,11 @@ export const MapView: React.FC<MapViewProps> = ({
                       </span>
                       {selectedPlace.source === 'live' ? (
                         <span className="px-1.5 py-0.2 text-[9px] font-extrabold rounded-md bg-emerald-100 text-emerald-800">
-                          Live POI
+                          Live Location
                         </span>
                       ) : (
                         <span className="px-1.5 py-0.2 text-[9px] font-bold rounded-md bg-amber-100 text-amber-800">
-                          Demo Hub
+                          Curated
                         </span>
                       )}
                     </div>

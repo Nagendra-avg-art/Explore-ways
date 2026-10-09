@@ -1,4 +1,5 @@
 import { FoodPlace, FoodCategory, FoodPriceLevel } from '../types/travel';
+import { getApiUrl } from './apiConfig';
 
 export interface FoodApiResponse {
   success: boolean;
@@ -54,7 +55,7 @@ export function normalizeFoodPlace(raw: any): FoodPlace {
     visitDuration: raw.visitDuration || (foodCategory === 'cafe' ? '30–45 min' : '45–60 min'),
     lat: raw.lat,
     lon: raw.lon,
-    imageUrl: raw.imageUrl || 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=800&q=80',
+    imageUrl: raw.imageUrl || '',
     shortDescription: raw.shortDescription || `Authentic ${foodCategoryLabel} dining.`,
     fullDescription: raw.fullDescription,
     whyRecommended: raw.whyRecommended || `Discovered ${raw.distanceKm ? `${raw.distanceKm.toFixed(1)} km away` : 'nearby'}.`,
@@ -73,7 +74,7 @@ export function normalizeFoodPlace(raw: any): FoodPlace {
     vegetarian: raw.vegetarian,
     address: raw.address,
     source: raw.source || 'demo',
-    sourceName: raw.sourceName || (raw.source === 'live' ? 'Live OpenStreetMap data' : 'Demo data')
+    sourceName: raw.sourceName || (raw.source === 'live' ? 'Live nearby dining' : 'Curated dining')
   };
 }
 
@@ -85,7 +86,8 @@ export async function fetchFoodPlaces(
   lon: number,
   radius: number = 5000,
   category: string = 'all',
-  openNow: boolean = false
+  openNow: boolean = false,
+  signal?: AbortSignal
 ): Promise<{
   places: FoodPlace[];
   isLive: boolean;
@@ -93,8 +95,8 @@ export async function fetchFoodPlaces(
   total: number;
 }> {
   try {
-    const url = `/api/places/food?lat=${lat}&lon=${lon}&radius=${radius}&category=${category}&openNow=${openNow}`;
-    const res = await fetch(url);
+    const url = getApiUrl(`/api/places/food?lat=${lat}&lon=${lon}&radius=${radius}&category=${category}&openNow=${openNow}`);
+    const res = await fetch(url, { signal });
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}: Failed to load food places`);
     }
@@ -105,7 +107,7 @@ export async function fetchFoodPlaces(
       return {
         places: normalized,
         isLive: data.isLive === true,
-        sourceLabel: data.sourceName || (data.isLive ? 'Live OpenStreetMap data' : 'Demo data'),
+        sourceLabel: data.sourceName || (data.isLive ? 'Live nearby dining' : 'Curated dining'),
         total: normalized.length
       };
     }

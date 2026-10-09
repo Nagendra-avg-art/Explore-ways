@@ -1,7 +1,10 @@
 import { Router } from 'express';
-import { getPlaces, getPlaceById, getNearbyPlaces, getNearbyFoodPlaces } from '../controllers/placesController.js';
+import { getPlaces, getPlaceById, getNearbyPlaces, getNearbyFoodPlaces, getPlacePhoto } from '../controllers/placesController.js';
 
 const router = Router();
+
+// GET /api/places/photo - Verified landmark photography lookup
+router.get('/photo', getPlacePhoto);
 
 // GET /api/places/nearby - Real OpenStreetMap Nearby POI discovery
 router.get('/nearby', getNearbyPlaces);

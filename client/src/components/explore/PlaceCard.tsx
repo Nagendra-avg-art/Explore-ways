@@ -15,17 +15,51 @@ export const PlaceCard: React.FC<PlaceCardProps> = ({
   onToggleSave,
   onViewDetails,
 }) => {
+  const [imageError, setImageError] = React.useState(false);
+
+  const getCategoryIcon = (cat: string) => {
+    switch (cat) {
+      case 'temples': return '🛕';
+      case 'history': return '🏛️';
+      case 'nature': return '🌊';
+      case 'food': return '🍴';
+      case 'architecture': return '🏗️';
+      case 'cafes': return '☕';
+      case 'shopping': return '🛍️';
+      case 'photography': return '📸';
+      case 'culture': return '🎭';
+      default: return '📍';
+    }
+  };
+
+  const hasValidPhoto = Boolean(place.imageUrl && place.imageUrl.trim().length > 0 && !imageError);
+
   return (
     <article className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between group">
       {/* Top Image & Floating Badges */}
       <div>
         <div className="relative h-48 w-full bg-slate-100 overflow-hidden">
-          <img
-            src={place.imageUrl}
-            alt={place.name}
-            className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-300"
-            loading="lazy"
-          />
+          {hasValidPhoto ? (
+            <img
+              src={place.imageUrl}
+              alt={place.name}
+              onError={() => setImageError(true)}
+              className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-300"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-slate-100 via-sky-50/50 to-teal-50/40 flex flex-col items-center justify-center p-4 text-center select-none relative overflow-hidden group-hover:scale-102 transition-transform duration-300">
+              <div className="w-16 h-16 rounded-2xl bg-white/90 border border-slate-200/80 shadow-xs flex items-center justify-center text-3xl mb-1.5">
+                {getCategoryIcon(place.category)}
+              </div>
+              <span className="text-xs font-bold text-slate-700">
+                {place.categoryLabel || 'Local Attraction'}
+              </span>
+              <span className="text-[10px] text-slate-400 font-medium">
+                Verified Location
+              </span>
+            </div>
+          )}
           
           {/* Top Left Badges: Match % & Category & Source */}
           <div className="absolute top-3 left-3 flex flex-wrap items-center gap-1.5 max-w-[80%]">
@@ -44,14 +78,14 @@ export const PlaceCard: React.FC<PlaceCardProps> = ({
             <div className="bg-white/95 backdrop-blur-xs text-slate-800 text-[11px] font-semibold px-2 py-1 rounded-lg shadow-xs">
               {place.categoryLabel}
             </div>
-            {place.source === 'live' ? (
-              <div className="bg-emerald-600/95 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-lg shadow-xs flex items-center space-x-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                <span>Live POI</span>
+            {place.provenance === 'curated' || place.source === 'curated' ? (
+              <div className="bg-amber-500/95 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-lg shadow-xs">
+                <span>Curated</span>
               </div>
             ) : (
-              <div className="bg-amber-500/95 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-lg shadow-xs">
-                <span>Demo Hub</span>
+              <div className="bg-emerald-600/95 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-lg shadow-xs flex items-center space-x-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                <span>Live Nearby</span>
               </div>
             )}
           </div>
@@ -80,7 +114,7 @@ export const PlaceCard: React.FC<PlaceCardProps> = ({
             </div>
           ) : (
             <div className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-xs text-slate-500 text-[11px] font-semibold px-2 py-1 rounded-lg shadow-xs flex items-center space-x-1">
-              <span>Unrated (OSM)</span>
+              <span>Unrated</span>
             </div>
           )}
 

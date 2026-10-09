@@ -27,9 +27,25 @@ export interface TransportEstimate {
   icon: string;
 }
 
+export type DataConfidence = 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN';
+export type PlaceProvenance = 'osm' | 'curated' | 'commercial';
+
+export interface PhotoMetadata {
+  photoUrl: string | null;
+  photoSource?: string;
+  attribution?: string;
+  license?: string;
+  verifiedForPlace: boolean;
+  sourcePlaceId?: string;
+  lastChecked?: string;
+}
+
 export interface Place {
   id: string;
+  internalId?: string;
   name: string;
+  officialName?: string;
+  alternateNames?: string[];
   category: CategoryId;
   categoryLabel: string;
   rating?: number;
@@ -40,6 +56,7 @@ export interface Place {
   lat: number;
   lon: number;
   imageUrl: string;
+  photo?: PhotoMetadata;
   shortDescription: string;
   fullDescription?: string;
   whyRecommended: string;
@@ -53,9 +70,17 @@ export interface Place {
   matchScore?: number;
   matchReasons?: string[];
   scoreBreakdown?: ScoreBreakdown;
-  source?: 'live' | 'demo';
+  source?: 'live' | 'demo' | 'curated';
   sourceName?: string;
+  provenance?: PlaceProvenance;
+  confidence?: DataConfidence;
+  verified?: boolean;
   address?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  website?: string;
+  phone?: string;
 }
 
 export interface ScoreBreakdown {
@@ -244,6 +269,8 @@ export interface RouteLeg {
   toLon: number;
   distanceKm: number;
   estimatedTravelTimeMin: number;
+  transportMode?: TransportMode;
+  transportLabel?: string;
   coordinates?: [number, number][]; // Street geometry for this specific leg
   isRoadNetwork?: boolean;
   maneuvers?: RouteManeuver[];

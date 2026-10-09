@@ -86,7 +86,7 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
                 Transport Mode Comparison
               </span>
               <span className="px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 text-[10px] font-extrabold">
-                Phase 9.3 Travel Times &amp; Fares
+                Travel Times &amp; Fares
               </span>
             </div>
 
@@ -362,7 +362,7 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-1.5 font-bold text-slate-800">
             <Info className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-            <span>Phase 9.3 Transparent Travel &amp; Fare Notes</span>
+            <span>Transparent Travel &amp; Fare Notes</span>
           </div>
           <button
             type="button"
@@ -376,9 +376,9 @@ export const TransportComparisonCard: React.FC<TransportComparisonCardProps> = (
         </div>
 
         <p className="text-[11px] text-slate-500 leading-relaxed pl-5">
-          • <strong>Walking:</strong> Always Free (₹0) on the {distanceKm} km OpenStreetMap road route.<br />
+          • <strong>Walking:</strong> Always Free (₹0) on the {distanceKm} km walking route.<br />
           • <strong>Auto &amp; Cab:</strong> Centralized distance-based estimates with traffic variance ranges. Not live booking prices.<br />
-          • <strong>Bus / Metro:</strong> Marked as unavailable until actual GTFS transit lines are integrated.
+          • <strong>Bus / Metro:</strong> Marked as unavailable until public transit schedules are connected for this corridor.
         </p>
 
         {/* Collapsible Assumptions Details */}

@@ -170,7 +170,7 @@ function calculateBudgetFit(
     return 0; // Unavailable
   }
 
-  const safeBudget = Math.max(100, budgetAmount);
+  const safeBudget = Math.max(100, typeof budgetAmount === 'number' && !isNaN(budgetAmount) ? budgetAmount : 2000);
   const midFare = (minFareInr + maxFareInr) / 2;
   const ratio = midFare / safeBudget;
 
@@ -254,13 +254,14 @@ function generateMatchReasons(
   const reasons: string[] = [];
   let tagline = 'Recommended Option';
 
+  const safeBudget = typeof preferences?.budgetAmount === 'number' && !isNaN(preferences.budgetAmount) ? preferences.budgetAmount : 2000;
   const midFare = Math.round((fare.minFareInr + fare.maxFareInr) / 2);
-  const budgetPct = Math.round((midFare / Math.max(1, preferences.budgetAmount)) * 100);
+  const budgetPct = Math.round((midFare / Math.max(1, safeBudget)) * 100);
   const timeSaved = Math.max(0, walkDurationMin - durationMin);
 
   if (mode === 'walk') {
     tagline = 'Zero-Cost Pedestrian Stroll';
-    reasons.push(`100% Free (₹0) — leaves your entire ₹${preferences.budgetAmount.toLocaleString('en-IN')} budget intact for sights and dining.`);
+    reasons.push(`100% Free (₹0) — leaves your entire ₹${safeBudget.toLocaleString('en-IN')} budget intact for sights and dining.`);
     if (distanceKm <= 1.5) {
       reasons.push(`Short pedestrian distance (${distanceKm} km) taking only ~${durationMin} min.`);
     } else {
@@ -270,7 +271,7 @@ function generateMatchReasons(
   } else if (mode === 'auto') {
     tagline = 'Best Balance of Travel Time & Budget';
     if (budgetPct <= 30) {
-      reasons.push(`Comfortably fits your ₹${preferences.budgetAmount.toLocaleString('en-IN')} budget (~${budgetPct}% of budget).`);
+      reasons.push(`Comfortably fits your ₹${safeBudget.toLocaleString('en-IN')} budget (~${budgetPct}% of budget).`);
     } else {
       reasons.push(`Economical metered rate (${fare.fareDisplay}) compared to a cab.`);
     }
@@ -298,7 +299,7 @@ function generateMatchReasons(
       reasons.push(`Saves ~${timeSaved} min compared to walking, maximizing your sightseeing hours.`);
     }
 
-    reasons.push(`Fits within your budget (${fare.fareDisplay} vs ₹${preferences.budgetAmount.toLocaleString('en-IN')}).`);
+    reasons.push(`Fits within your budget (${fare.fareDisplay} vs ₹${safeBudget.toLocaleString('en-IN')}).`);
 
     if (distanceKm > 15) {
       reasons.push(`Significantly more comfortable for longer highway/arterial distance (${distanceKm} km).`);
@@ -489,19 +490,22 @@ export function recommendTransportMode(input: TransportScoringInput): TransportR
   });
 
   // Budget impact calculations
+  const safeBudget = typeof preferences?.budgetAmount === 'number' && !isNaN(preferences.budgetAmount) ? preferences.budgetAmount : 2000;
+  const safeHours = typeof preferences?.availableHours === 'number' && !isNaN(preferences.availableHours) ? preferences.availableHours : 4;
+
   const fareMin = recommended.fareEstimate.minFareInr;
   const fareMax = recommended.fareEstimate.maxFareInr;
   const midFare = Math.round((fareMin + fareMax) / 2);
-  const remainingMin = Math.max(0, preferences.budgetAmount - fareMax);
-  const remainingMax = Math.max(0, preferences.budgetAmount - fareMin);
-  const budgetPct = Math.round((midFare / Math.max(1, preferences.budgetAmount)) * 100);
+  const remainingMin = Math.max(0, safeBudget - fareMax);
+  const remainingMax = Math.max(0, safeBudget - fareMin);
+  const budgetPct = Math.round((midFare / Math.max(1, safeBudget)) * 100);
 
   // Time impact calculations
-  const availableMinutes = preferences.availableHours * 60;
+  const availableMinutes = safeHours * 60;
   const remainingTimeMinutes = Math.max(0, availableMinutes - recommended.travelTimeMin);
   const timeSavingsVsWalkMin = recommended.mode !== 'walk' ? Math.max(0, walkDuration - recommended.travelTimeMin) : 0;
 
-  const summaryExplanation = `${recommended.modeLabel} is recommended as the ${recommended.tagline.toLowerCase()} for this ${distanceKm} km route. It uses ~${budgetPct}% of your ₹${preferences.budgetAmount.toLocaleString('en-IN')} trip budget and leaves ${Math.floor(remainingTimeMinutes / 60)}h ${remainingTimeMinutes % 60}m for sightseeing.`;
+  const summaryExplanation = `${recommended.modeLabel} is recommended as the ${recommended.tagline.toLowerCase()} for this ${distanceKm} km route. It uses ~${budgetPct}% of your ₹${safeBudget.toLocaleString('en-IN')} trip budget and leaves ${Math.floor(remainingTimeMinutes / 60)}h ${remainingTimeMinutes % 60}m for sightseeing.`;
 
   return {
     recommended,
@@ -509,7 +513,7 @@ export function recommendTransportMode(input: TransportScoringInput): TransportR
     unavailableModes,
     allRanked: [recommended, ...alternatives, ...unavailableModes],
     budgetImpact: {
-      tripBudgetInr: preferences.budgetAmount,
+      tripBudgetInr: safeBudget,
       estimatedFareMinInr: fareMin,
       estimatedFareMaxInr: fareMax,
       remainingBudgetMinInr: remainingMin,

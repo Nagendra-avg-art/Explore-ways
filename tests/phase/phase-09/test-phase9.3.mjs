@@ -4,7 +4,7 @@ import {
   buildLegFareComparison, 
   computeTripFareSummary, 
   CENTRALIZED_FARE_CONFIG 
-} from './client/src/services/fareEstimationService.ts';
+} from '../../../client/src/services/fareEstimationService.ts';
 
 const BASE_URL = 'http://localhost:5000/api';
 

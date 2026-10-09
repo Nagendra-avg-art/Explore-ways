@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef, ReactNode } from 'react';
 import { FoodPlace } from '../types/travel';
 import { useLocation } from './LocationContext';
 import { usePreferences } from './PreferencesContext';
@@ -40,30 +40,61 @@ export const FoodProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isLive, setIsLive] = useState<boolean>(false);
-  const [sourceLabel, setSourceLabel] = useState<string>('Live OpenStreetMap data');
+  const [sourceLabel, setSourceLabel] = useState<string>('Live nearby dining');
+
+  // Concurrency & Race Condition Guards (Prevent stale requests overwriting new destinations)
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const currentRequestIdRef = useRef<number>(0);
 
   const loadFood = useCallback(async (r: number) => {
     if (!location.lat || !location.lon) return;
 
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const requestId = ++currentRequestIdRef.current;
+
+    // Immediately clear stale food places to avoid cross-city visual bleed
+    setFoodPlaces([]);
     setIsLoading(true);
     setError(null);
 
     try {
-      const data = await fetchFoodPlaces(location.lat, location.lon, r);
-      setFoodPlaces(data.places);
+      const data = await fetchFoodPlaces(location.lat, location.lon, r, 'all', false, controller.signal);
+      if (requestId !== currentRequestIdRef.current) {
+        return; // Discard superseded response
+      }
+      setFoodPlaces(data.places || []);
       setIsLive(data.isLive);
       setSourceLabel(data.sourceLabel);
     } catch (err: any) {
-      console.warn('Food discovery error:', err.message);
-      setError('Food places couldn\'t be loaded right now.');
+      if (err?.name === 'AbortError') {
+        return; // Cancelled intentionally due to new request
+      }
+      if (requestId !== currentRequestIdRef.current) {
+        return;
+      }
+      console.warn('Food discovery error:', err?.message);
+      setError('Dining places couldn\'t be loaded right now.');
+      setFoodPlaces([]);
     } finally {
-      setIsLoading(false);
+      if (requestId === currentRequestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [location.lat, location.lon]);
 
   // Load when location or radius changes
   useEffect(() => {
     loadFood(radius);
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [loadFood, radius]);
 
   const refreshFoodPlaces = useCallback(async () => {

@@ -22,6 +22,7 @@ import {
   computeTripFareSummary,
   buildLegFareComparison
 } from '../services/fareEstimationService';
+import { recommendTripTransport } from '../services/transportRecommendationService';
 
 interface TripContextType {
   tripPlaces: Place[];
@@ -40,6 +41,12 @@ interface TripContextType {
   tripRoute: TripRoute;
   preferredMode: import('../types/travel').TransportMode;
   setPreferredMode: (mode: import('../types/travel').TransportMode) => void;
+  selectedTransport: import('../types/travel').TransportMode | null;
+  setSelectedTransport: (mode: import('../types/travel').TransportMode | null) => void;
+  recommendedTransport: import('../types/travel').TransportMode;
+  activeTransport: import('../types/travel').TransportMode;
+  resetToRecommendedTransport: () => void;
+  reorderTripStops: (newOrderIds: string[]) => void;
 }
 
 const STORAGE_KEY = 'smart_travel_trip_place_ids';
@@ -64,13 +71,15 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch {
       // ignore
     }
-    return ['charminar', 'golconda'];
+    return [];
   });
 
   const [isOptimized, setIsOptimized] = useState<boolean>(false);
   const [optimizedPlaceIds, setOptimizedPlaceIds] = useState<string[]>([]);
   const [distanceSavedKm, setDistanceSavedKm] = useState<number>(0);
-  const [preferredMode, setPreferredMode] = useState<import('../types/travel').TransportMode>('auto');
+
+  // User's explicit transport choice (null if using system recommendation)
+  const [selectedTransport, setSelectedTransport] = useState<import('../types/travel').TransportMode | null>(null);
 
   // Road geometry state (fetched asynchronously from OSRM)
   const [roadGeometry, setRoadGeometry] = useState<{
@@ -117,6 +126,35 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return activeStops.map((p) => p.id);
   }, [activeStops]);
 
+  // System recommended transport based on active stops and preferences
+  const recommendedTransport: import('../types/travel').TransportMode = useMemo(() => {
+    if (activeStops.length === 0) return 'auto';
+    const origin = {
+      label: location.isManual ? `${location.city} Center` : `${location.area || location.city}`,
+      lat: location.lat,
+      lon: location.lon,
+      isActualGps: !location.isManual,
+    };
+    const base = calculateTripRoute(origin, activeStops, isOptimized, distanceSavedKm, 'auto', preferences);
+    if (!base.legs || base.legs.length === 0) return 'auto';
+    const rec = recommendTripTransport(
+      base.legs.map((l) => ({ distanceKm: l.distanceKm, roadDurationMin: l.estimatedTravelTimeMin })),
+      preferences
+    );
+    return rec.recommended.mode;
+  }, [location, activeStops, isOptimized, distanceSavedKm, preferences]);
+
+  // Active transport: user's explicit choice if set, otherwise system recommendation
+  const activeTransport: import('../types/travel').TransportMode = selectedTransport ?? recommendedTransport;
+
+  const setPreferredMode = (mode: import('../types/travel').TransportMode) => {
+    setSelectedTransport(mode);
+  };
+
+  const resetToRecommendedTransport = () => {
+    setSelectedTransport(null);
+  };
+
   // Asynchronously query real road directions via OSRM when waypoints change
   useEffect(() => {
     if (activeStops.length === 0 || !location) {
@@ -130,7 +168,7 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       ...activeStops.map((p) => ({ lat: p.lat, lon: p.lon }))
     ];
 
-    fetchRealRoadDirections(waypoints, preferredMode).then((res) => {
+    fetchRealRoadDirections(waypoints, activeTransport).then((res) => {
       if (isCancelled || !res) return;
       setRoadGeometry({
         routeCoordinates: res.coordinates,
@@ -145,7 +183,7 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => {
       isCancelled = true;
     };
-  }, [location.lat, location.lon, activeStops, preferredMode]);
+  }, [location.lat, location.lon, activeStops, activeTransport]);
 
   // Compute TripRoute metrics (instantly calculated, seamlessly enhanced with road geometry)
   const tripRoute: TripRoute = useMemo(() => {
@@ -155,7 +193,7 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       lon: location.lon,
       isActualGps: !location.isManual,
     };
-    const base = calculateTripRoute(origin, activeStops, isOptimized, distanceSavedKm, preferredMode, preferences);
+    const base = calculateTripRoute(origin, activeStops, isOptimized, distanceSavedKm, activeTransport, preferences);
 
     if (roadGeometry && roadGeometry.routeCoordinates && roadGeometry.routeCoordinates.length > 0) {
       const enhancedLegs = base.legs.map((leg, idx) => {
@@ -169,13 +207,15 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             roadLeg.durationMin,
             roadGeometry.routingSource || 'osrm'
           );
-          const repTime = getRepresentativeTravelTimeMin(preferredMode, comp.modes);
+          const repTime = getRepresentativeTravelTimeMin(activeTransport, comp.modes);
           const legFares = buildLegFareComparison(leg.fromName, leg.toName, roadLeg.distanceKm);
 
           return {
             ...leg,
             distanceKm: roadLeg.distanceKm,
             estimatedTravelTimeMin: repTime,
+            transportMode: activeTransport,
+            transportLabel: activeTransport.toUpperCase(),
             isRoadNetwork: true,
             maneuvers: roadLeg.maneuvers,
             transportComparison: comp,
@@ -227,23 +267,23 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       // Recalculate schedule, feasibility, and explanation with real road network legs
       const schedule = calculateItinerarySchedule(activeStops, enhancedLegs, '09:00', preferences.pace);
-      const feasibility = calculateItineraryFeasibility(schedule, preferences, preferredMode, activeStops);
+      const feasibility = calculateItineraryFeasibility(schedule, preferences, activeTransport, activeStops);
       const itineraryExplanation = generateItineraryExplanation(
         origin,
         activeStops,
         enhancedLegs,
         preferences,
-        preferredMode,
+        activeTransport,
         feasibility,
         distanceSavedKm
       );
 
       // Selected mode user-facing time display
       let selectedModeTimeDisplay: string;
-      if (preferredMode === 'bus') {
+      if (activeTransport === 'bus') {
         selectedModeTimeDisplay = 'Unavailable';
       } else if (enhancedLegs.length === 1 && enhancedLegs[0].transportComparison) {
-        selectedModeTimeDisplay = enhancedLegs[0].transportComparison.modes[preferredMode].travelTimeDisplay;
+        selectedModeTimeDisplay = enhancedLegs[0].transportComparison.modes[activeTransport].travelTimeDisplay;
       } else {
         selectedModeTimeDisplay = `${schedule.totalTravelMin} min`;
       }
@@ -251,7 +291,7 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Multi-stop sum of per-leg fare estimates
       const fareSummary = computeTripFareSummary(
         enhancedLegs.map((l) => ({ fromName: l.fromName, toName: l.toName, distanceKm: l.distanceKm })),
-        preferredMode
+        activeTransport
       );
       const totalEstimatedTransportCostInr = Math.round((fareSummary.totalMinFareInr + fareSummary.totalMaxFareInr) / 2);
 
@@ -261,6 +301,7 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         totalTravelTimeMin: schedule.totalTravelMin,
         totalVisitTimeMin: schedule.totalVisitMin,
         totalEstimatedDurationMin: schedule.totalTripMin,
+        preferredMode: activeTransport,
         legs: enhancedLegs,
         routeCoordinates: roadGeometry.routeCoordinates,
         isRoadNetwork: roadGeometry.isRoadNetwork,
@@ -276,7 +317,7 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     return base;
-  }, [location, activeStops, isOptimized, distanceSavedKm, preferredMode, roadGeometry, preferences]);
+  }, [location, activeStops, isOptimized, distanceSavedKm, activeTransport, roadGeometry, preferences]);
 
   // Route Optimization (Nearest Neighbor / Smart Multi-Factor)
   const optimizeTripRoute = () => {
@@ -285,7 +326,7 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       { lat: location.lat, lon: location.lon },
       manualStops,
       preferences,
-      preferredMode
+      activeTransport
     );
     setOptimizedPlaceIds(res.orderedStops.map((p) => p.id));
     setDistanceSavedKm(res.distanceSavedKm);
@@ -313,7 +354,7 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         { lat: location.lat, lon: location.lon },
         allUpdatedPlaces,
         preferences,
-        preferredMode
+        activeTransport
       );
       setOptimizedPlaceIds(res.orderedStops.map((p) => p.id));
       setDistanceSavedKm(res.distanceSavedKm);
@@ -325,6 +366,22 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const updated = manualPlaceIds.filter((id) => id !== placeId);
     setManualPlaceIds(updated);
 
+    if (updated.length === 0) {
+      setOptimizedPlaceIds([]);
+      setIsOptimized(false);
+      setDistanceSavedKm(0);
+      setRoadGeometry(null);
+      setSelectedTransport(null);
+      return;
+    }
+
+    if (updated.length === 1) {
+      setOptimizedPlaceIds(updated);
+      setIsOptimized(false);
+      setDistanceSavedKm(0);
+      return;
+    }
+
     if (isOptimized) {
       const allUpdatedPlaces = updated
         .map((id) => knownPlacesMap[id] || DEMO_PLACES.find((p) => p.id === id))
@@ -333,7 +390,7 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         { lat: location.lat, lon: location.lon },
         allUpdatedPlaces,
         preferences,
-        preferredMode
+        activeTransport
       );
       setOptimizedPlaceIds(res.orderedStops.map((p) => p.id));
       setDistanceSavedKm(res.distanceSavedKm);
@@ -358,6 +415,8 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setOptimizedPlaceIds([]);
     setIsOptimized(false);
     setDistanceSavedKm(0);
+    setRoadGeometry(null);
+    setSelectedTransport(null);
   };
 
   // Manual re-ordering
@@ -383,6 +442,17 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setManualPlaceIds(updated);
   };
 
+  const reorderTripStops = (newOrderIds: string[]) => {
+    setIsOptimized(false);
+    setDistanceSavedKm(0);
+    const existingSet = new Set(manualPlaceIds);
+    const valid = newOrderIds.filter((id) => existingSet.has(id));
+    manualPlaceIds.forEach((id) => {
+      if (!valid.includes(id)) valid.push(id);
+    });
+    setManualPlaceIds(valid);
+  };
+
   return (
     <TripContext.Provider
       value={{
@@ -400,8 +470,14 @@ export const TripProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isOptimized,
         distanceSavedKm,
         tripRoute,
-        preferredMode,
+        preferredMode: activeTransport,
         setPreferredMode,
+        selectedTransport,
+        setSelectedTransport,
+        recommendedTransport,
+        activeTransport,
+        resetToRecommendedTransport,
+        reorderTripStops,
       }}
     >
       {children}

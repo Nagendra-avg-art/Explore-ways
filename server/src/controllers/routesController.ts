@@ -29,6 +29,9 @@ export const getDirections = async (req: Request, res: Response) => {
   if (pairs.length < 2) {
     return res.status(400).json({ error: 'At least 2 coordinate pairs are required for routing' });
   }
+  if (pairs.length > 25) {
+    return res.status(400).json({ error: 'Maximum 25 waypoints allowed per route request' });
+  }
 
   const parsedWaypoints: { lat: number; lon: number }[] = [];
   for (const pair of pairs) {

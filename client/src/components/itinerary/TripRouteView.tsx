@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Navigation, 
   Sparkles, 
@@ -11,39 +11,88 @@ import {
   CheckCircle2, 
   RotateCcw, 
   Plus, 
-  Footprints, 
-  Car, 
-  Bus,
-  Info,
-  ExternalLink,
+  Info, 
+  ExternalLink, 
+  Compass, 
+  Utensils, 
+  Clock,
   AlertTriangle,
+  Bot,
   Wallet,
-  Compass,
-  XCircle
+  ShieldCheck
 } from 'lucide-react';
 import { useTrip } from '../../context/TripContext';
 import { usePreferences } from '../../context/PreferencesContext';
+import { useLocation } from '../../context/LocationContext';
 import { Place, TransportMode } from '../../types/travel';
 import { formatDistanceKm } from '../../services/routingService';
-import { TransportComparisonCard } from '../transport/TransportComparisonCard';
 import { recommendTripTransport } from '../../services/transportRecommendationService';
+import { computeTripFareSummary } from '../../services/fareEstimationService';
 import {
   calculateItinerarySchedule,
   calculateItineraryFeasibility,
   generateItineraryExplanation,
 } from '../../services/itineraryEngineService';
+import { useWeather } from '../../context/WeatherContext';
+import { WeatherTripAlert } from '../weather';
+import { calculateWeatherTripImpact } from '../../services/weatherImpactService';
 
 interface TripRouteViewProps {
   onViewPlaceDetails: (place: Place) => void;
   onNavigateToMap: () => void;
   onExploreMore: () => void;
+  onNavigateToFood?: () => void;
+  onNavigateToAI?: (initialPrompt?: string) => void;
 }
+
+const MODE_CONFIG: Record<TransportMode, {
+  label: string;
+  icon: string;
+  summaryHeadline: string;
+  defaultReason: string;
+}> = {
+  walk: {
+    label: 'Walking',
+    icon: '🚶',
+    summaryHeadline: 'Pedestrian stroll — 100% free of charge',
+    defaultReason: 'Best for saving money, but increases travel time.',
+  },
+  auto: {
+    label: 'Auto Rickshaw',
+    icon: '🛺',
+    summaryHeadline: 'Best balance of travel time and budget',
+    defaultReason: 'Economical point-to-point urban transit with standard metered rates.',
+  },
+  cab: {
+    label: 'Cab (Ola/Uber)',
+    icon: '🚕',
+    summaryHeadline: 'Fastest & most comfortable transit',
+    defaultReason: 'Ideal for faster travel, group comfort, or longer route distances.',
+  },
+  bus: {
+    label: 'Bus / Metro',
+    icon: '🚌',
+    summaryHeadline: 'Public transit option (schedules unlinked)',
+    defaultReason: 'Public transit schedule feeds are currently not connected for this corridor.',
+  },
+};
+
+const AI_QUICK_QUESTIONS = [
+  'Is this trip worth doing?',
+  'Can I add another place?',
+  'Why is this the best order?',
+  'How much will the trip cost?',
+  'Will rain affect my trip?',
+];
 
 export const TripRouteView: React.FC<TripRouteViewProps> = ({
   onViewPlaceDetails,
   onNavigateToMap,
   onExploreMore,
+  onNavigateToFood,
+  onNavigateToAI,
 }) => {
+  // 1. Context Hooks
   const {
     tripPlaces,
     tripRoute,
@@ -55,1173 +104,967 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
     isOptimized,
     distanceSavedKm,
     clearTrip,
-    preferredMode,
-    setPreferredMode,
+    selectedTransport,
+    setSelectedTransport,
+    recommendedTransport,
+    activeTransport,
+    resetToRecommendedTransport,
+    reorderTripStops,
   } = useTrip();
 
   const { preferences } = usePreferences();
-  const [expandedLegIndex, setExpandedLegIndex] = useState<number | null>(null);
-  const [expandedManeuversLegIndex, setExpandedManeuversLegIndex] = useState<number | null>(null);
-  const [selectedLegIndexForComparison, setSelectedLegIndexForComparison] = useState<number>(0);
-  const [showFareAssumptions, setShowFareAssumptions] = useState<boolean>(false);
+  const { location } = useLocation();
+  const { weather } = useWeather();
 
-  // Phase 9.4: Smart Itinerary Transport Recommendation
-  const tripRecommendation = React.useMemo(() => {
+  // 2. UI State Hooks
+  const [showTransportDetails, setShowTransportDetails] = useState<boolean>(false);
+  const [showWhyOrder, setShowWhyOrder] = useState<boolean>(false);
+  const [showAdvancedDetails, setShowAdvancedDetails] = useState<boolean>(false);
+  const [expandedManeuversLegIndex, setExpandedManeuversLegIndex] = useState<number | null>(null);
+
+  // 3. Transport Recommendation
+  const tripRecommendation = useMemo(() => {
+    if (tripPlaces.length === 0 || tripRoute.legs.length === 0) return null;
     return recommendTripTransport(
       tripRoute.legs.map((l) => ({ distanceKm: l.distanceKm, roadDurationMin: l.estimatedTravelTimeMin })),
       preferences
     );
-  }, [tripRoute.legs, preferences]);
+  }, [tripPlaces.length, tripRoute.legs, preferences]);
 
-  if (tripPlaces.length === 0) {
-    return (
-      <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center space-y-4 max-w-xl mx-auto shadow-xs">
-        <div className="w-16 h-16 rounded-2xl bg-orange-50 text-orange-500 flex items-center justify-center mx-auto shadow-inner">
-          <Navigation className="w-8 h-8" />
-        </div>
-        <h3 className="font-extrabold text-slate-900 text-xl">Your Trip Route is Empty</h3>
-        <p className="text-sm text-slate-500 max-w-sm mx-auto leading-relaxed">
-          Add destinations from Recommendations or Explore to automatically calculate distances, travel times, and an optimized itinerary.
-        </p>
-        <button
-          onClick={onExploreMore}
-          className="px-6 py-3 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-sky-600/20 cursor-pointer inline-flex items-center space-x-2"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Explore Recommended Places</span>
-        </button>
-      </div>
-    );
-  }
+  // Recommended Mode vs User Explicit Selection
+  const recommendedMode: TransportMode = tripRecommendation?.recommended?.mode ?? recommendedTransport ?? 'auto';
+  const isCustomSelected = selectedTransport !== null && selectedTransport !== recommendedMode;
 
-  // Phase 10: Centralized Smart Itinerary Engine calculations
-  const schedule = React.useMemo(() => {
+  // Schedule Engine
+  const schedule = useMemo(() => {
     if (tripRoute.schedule) return tripRoute.schedule;
     return calculateItinerarySchedule(tripPlaces, tripRoute.legs, '09:00', preferences.pace);
   }, [tripRoute.schedule, tripPlaces, tripRoute.legs, preferences.pace]);
 
-  const feasibility = React.useMemo(() => {
-    if (tripRoute.feasibility) return tripRoute.feasibility;
-    return calculateItineraryFeasibility(schedule, preferences, preferredMode, tripPlaces);
-  }, [tripRoute.feasibility, schedule, preferences, preferredMode, tripPlaces]);
+  // Weather Impact Engine
+  const weatherImpact = useMemo(() => {
+    return calculateWeatherTripImpact(
+      weather,
+      tripPlaces,
+      schedule,
+      activeTransport,
+      tripRoute.legs
+    );
+  }, [weather, tripPlaces, schedule, activeTransport, tripRoute.legs]);
 
-  const itineraryExplanation = React.useMemo(() => {
+  // Feasibility Engine
+  const feasibility = useMemo(() => {
+    if (tripRoute.feasibility) return tripRoute.feasibility;
+    return calculateItineraryFeasibility(schedule, preferences, activeTransport, tripPlaces);
+  }, [tripRoute.feasibility, schedule, preferences, activeTransport, tripPlaces]);
+
+  // Itinerary Explanation
+  const itineraryExplanation = useMemo(() => {
     if (tripRoute.itineraryExplanation) return tripRoute.itineraryExplanation;
     return generateItineraryExplanation(
       tripRoute.origin,
       tripPlaces,
       tripRoute.legs,
       preferences,
-      preferredMode,
+      activeTransport,
       feasibility,
       distanceSavedKm
     );
-  }, [tripRoute.itineraryExplanation, tripRoute.origin, tripPlaces, tripRoute.legs, preferences, preferredMode, feasibility, distanceSavedKm]);
+  }, [tripRoute.itineraryExplanation, tripRoute.origin, tripPlaces, tripRoute.legs, preferences, activeTransport, feasibility, distanceSavedKm]);
 
-  // Duration calculations
-  const totalMin = feasibility.totalTripMinutes;
+  // Time metrics
+  const totalMin = feasibility ? feasibility.totalTripMinutes : 0;
   const hours = Math.floor(totalMin / 60);
   const minutes = totalMin % 60;
   const formattedTotalTime = hours > 0 ? `${hours}h ${minutes > 0 ? `${minutes}m` : ''}` : `${minutes} min`;
 
-  // Google Maps Multi-Stop URL construction
-  const lastPlace = tripPlaces[tripPlaces.length - 1];
-  const waypoints = tripPlaces.length > 1 ? tripPlaces.slice(0, -1) : [];
-  const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${tripRoute.origin.lat},${tripRoute.origin.lon}&destination=${lastPlace.lat},${lastPlace.lon}${
-    waypoints.length > 0 ? `&waypoints=${waypoints.map((p) => `${p.lat},${p.lon}`).join('|')}` : ''
-  }&travelmode=driving`;
+  const destinationCity = location?.city || 'Your Destination';
+  const startPointLabel = location?.area 
+    ? `${location.area}, ${location.city}` 
+    : (location?.city || tripRoute?.origin?.label || 'Starting Location');
 
-  const toggleLegExpand = (idx: number) => {
-    setExpandedLegIndex((prev) => (prev === idx ? null : idx));
-  };
+  // Formatted Distance
+  const formattedDistance = useMemo(() => {
+    const km = tripRoute.totalDistanceKm || 0;
+    if (km < 1) {
+      return `${Math.round(km * 1000)} m`;
+    }
+    return `${km} km`;
+  }, [tripRoute.totalDistanceKm]);
+
+  // Multi-Mode Metrics
+  const modeMetrics = useMemo(() => {
+    const legsForFare = tripRoute.legs.map((l) => ({ fromName: l.fromName, toName: l.toName, distanceKm: l.distanceKm }));
+    const autoFare = computeTripFareSummary(legsForFare, 'auto');
+    const cabFare = computeTripFareSummary(legsForFare, 'cab');
+
+    let totalWalkMin = 0;
+    let totalAutoMin = 0;
+    let totalCabMin = 0;
+
+    tripRoute.legs.forEach((leg) => {
+      totalWalkMin += leg.modeEstimates?.walk?.timeMin || Math.round(leg.distanceKm * 12);
+      totalAutoMin += leg.modeEstimates?.auto?.timeMin || Math.round(leg.distanceKm * 2.5);
+      totalCabMin += leg.modeEstimates?.cab?.timeMin || Math.round(leg.distanceKm * 2);
+    });
+
+    const formatMin = (m: number) => {
+      const h = Math.floor(m / 60);
+      const rem = m % 60;
+      return h > 0 ? `${h}h ${rem > 0 ? `${rem}m` : ''}` : `${rem} min`;
+    };
+
+    return {
+      auto: {
+        fare: autoFare.totalFareDisplay,
+        timeDisplay: formatMin(totalAutoMin),
+      },
+      cab: {
+        fare: cabFare.totalFareDisplay,
+        timeDisplay: formatMin(totalCabMin),
+      },
+      walk: {
+        fare: 'Free (₹0)',
+        timeDisplay: formatMin(totalWalkMin),
+      },
+      bus: {
+        fare: 'Fare unavailable',
+        timeDisplay: 'Unavailable',
+      },
+    };
+  }, [tripRoute.legs]);
+
+  // Budget Breakdown Calculation
+  const budgetSummary = useMemo(() => {
+    const legsForFare = tripRoute.legs.map((l) => ({ fromName: l.fromName, toName: l.toName, distanceKm: l.distanceKm }));
+    const fareSummary = computeTripFareSummary(legsForFare, activeTransport);
+
+    const travelMin = fareSummary.totalMinFareInr;
+    const travelMax = fareSummary.totalMaxFareInr;
+
+    // Entry fees parsing from stops
+    let placeFeesMin = 0;
+    let placeFeesMax = 0;
+    tripPlaces.forEach((p) => {
+      if (p.entryFee) {
+        const match = p.entryFee.match(/(\d+)/);
+        if (match) {
+          const val = parseInt(match[1], 10);
+          placeFeesMin += val;
+          placeFeesMax += val;
+        }
+      }
+    });
+
+    const totalMinFare = travelMin + placeFeesMin;
+    const totalMaxFare = travelMax + placeFeesMax;
+    const userBudget = preferences.budgetAmount || 2500;
+
+    const remainingMin = Math.max(0, userBudget - totalMaxFare);
+    const remainingMax = Math.max(0, userBudget - totalMinFare);
+
+    let travelDisplay = 'Free (₹0)';
+    if (activeTransport === 'bus') {
+      travelDisplay = 'Fare unlinked';
+    } else if (activeTransport !== 'walk') {
+      travelDisplay = `₹${travelMin.toLocaleString('en-IN')}–₹${travelMax.toLocaleString('en-IN')}`;
+    }
+
+    let estimatedTotalDisplay = 'Free (₹0)';
+    if (activeTransport === 'walk') {
+      estimatedTotalDisplay = placeFeesMax > 0 ? `₹${placeFeesMin.toLocaleString('en-IN')}–₹${placeFeesMax.toLocaleString('en-IN')}` : 'Free (₹0)';
+    } else if (activeTransport === 'bus') {
+      estimatedTotalDisplay = placeFeesMax > 0 ? `₹${placeFeesMin.toLocaleString('en-IN')}+` : 'Transit unlinked';
+    } else {
+      estimatedTotalDisplay = `₹${totalMinFare.toLocaleString('en-IN')}–₹${totalMaxFare.toLocaleString('en-IN')}`;
+    }
+
+    return {
+      travelDisplay,
+      placeFeesDisplay: placeFeesMax > 0 ? `₹${placeFeesMin.toLocaleString('en-IN')}–₹${placeFeesMax.toLocaleString('en-IN')}` : 'Free / Included',
+      estimatedTotalDisplay,
+      userBudgetDisplay: `₹${userBudget.toLocaleString('en-IN')}`,
+      remainingDisplay: `₹${remainingMin.toLocaleString('en-IN')}–₹${remainingMax.toLocaleString('en-IN')}`,
+      isOverBudget: totalMinFare > userBudget,
+      userBudget,
+      totalMinFare,
+      totalMaxFare,
+    };
+  }, [tripRoute.legs, activeTransport, tripPlaces, preferences.budgetAmount]);
+
+  // Trip Confidence Status (Trip looks good vs Trip needs attention)
+  const tripConfidence = useMemo(() => {
+    const reasons: string[] = [];
+
+    if (weatherImpact?.hasWeatherAlert || weatherImpact?.overallSeverity === 'HIGH' || weatherImpact?.overallSeverity === 'SEVERE') {
+      reasons.push(weatherImpact.summary || 'Weather conflict likely during outdoor stops');
+    }
+
+    const closedStops = schedule.stops.filter((s) => s.openStatus === 'closed');
+    if (closedStops.length > 0) {
+      reasons.push(`${closedStops.length} stop(s) may be closed during scheduled visit hours`);
+    }
+
+    if (feasibility.status === 'exceeded') {
+      reasons.push(`Schedule exceeds planned available time by ${feasibility.exceededMinutes}m`);
+    }
+
+    if (budgetSummary.isOverBudget) {
+      reasons.push(`Estimated cost exceeds your planned budget of ${budgetSummary.userBudgetDisplay}`);
+    }
+
+    if (activeTransport === 'bus') {
+      reasons.push('Bus/metro schedules are unlinked for this travel corridor');
+    }
+
+    if (activeTransport === 'walk' && tripRoute.totalDistanceKm > 4) {
+      reasons.push(`Walking distance is long (${tripRoute.totalDistanceKm} km) — consider Auto or Cab`);
+    } else if (tripRoute.totalDistanceKm > 40) {
+      reasons.push(`Long travel distance (${tripRoute.totalDistanceKm} km) across stops`);
+    }
+
+    const isGood = reasons.length === 0;
+
+    return {
+      isGood,
+      badgeText: isGood ? 'Trip looks good ✓' : 'Trip needs attention ⚠️',
+      reasons,
+    };
+  }, [weatherImpact, schedule.stops, feasibility, budgetSummary, activeTransport, tripRoute.totalDistanceKm]);
+
+  // Friendly "Why this order?" points
+  const friendlyOrderPoints = useMemo(() => {
+    const points: string[] = [];
+
+    if (isOptimized || distanceSavedKm > 0) {
+      points.push(distanceSavedKm > 0 
+        ? `Shorter travel between stops (~${distanceSavedKm} km saved)` 
+        : 'Shorter travel between stops with streamlined routing');
+    } else {
+      points.push('Shorter travel between stops');
+    }
+
+    const hasMatchedInterests = tripPlaces.some((p) => p.matchScore && p.matchScore > 40);
+    if (hasMatchedInterests) {
+      points.push('Matches your interests');
+    }
+
+    if (feasibility.status !== 'exceeded') {
+      points.push('Fits your available time');
+    }
+
+    if (!weatherImpact?.hasWeatherAlert) {
+      points.push('Avoids likely rain');
+    }
+
+    if (!budgetSummary.isOverBudget) {
+      points.push('Keeps the trip within budget');
+    }
+
+    return points;
+  }, [isOptimized, distanceSavedKm, tripPlaces, feasibility.status, weatherImpact, budgetSummary.isOverBudget]);
+
+  // Active & Recommended mode metadata
+  const activeDetails = MODE_CONFIG[activeTransport] || MODE_CONFIG.auto;
+  const recommendedDetails = MODE_CONFIG[recommendedMode] || MODE_CONFIG.cab;
+
+  const activeHeadline = useMemo(() => {
+    if (!isCustomSelected && tripRecommendation?.recommended?.tagline) {
+      return tripRecommendation.recommended.tagline;
+    }
+    return activeDetails.summaryHeadline;
+  }, [isCustomSelected, tripRecommendation, activeDetails]);
+
+  const activeReason = useMemo(() => {
+    if (!isCustomSelected && tripRecommendation?.recommended?.matchReasons && tripRecommendation.recommended.matchReasons.length > 0) {
+      return tripRecommendation.recommended.matchReasons.join('. ');
+    }
+    return activeDetails.defaultReason;
+  }, [isCustomSelected, tripRecommendation, activeDetails]);
+
+  // Safe Google Maps navigation URL
+  const googleMapsUrl = useMemo(() => {
+    if (tripPlaces.length === 0) return '';
+    const lastPlace = tripPlaces[tripPlaces.length - 1];
+    const waypoints = tripPlaces.length > 1 ? tripPlaces.slice(0, -1) : [];
+    return `https://www.google.com/maps/dir/?api=1&origin=${tripRoute.origin.lat},${tripRoute.origin.lon}&destination=${lastPlace.lat},${lastPlace.lon}${
+      waypoints.length > 0 ? `&waypoints=${waypoints.map((p) => `${p.lat},${p.lon}`).join('|')}` : ''
+    }&travelmode=driving`;
+  }, [tripPlaces, tripRoute.origin]);
 
   const toggleManeuversExpand = (idx: number) => {
     setExpandedManeuversLegIndex((prev) => (prev === idx ? null : idx));
   };
 
-  return (
-    <div className="space-y-6 max-w-4xl mx-auto animate-fadeIn">
-      {/* Top Banner: Route Metrics & Controls */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-              <span className="px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[11px] font-extrabold tracking-wide uppercase">
-                Phase 10 Smart Itinerary
-              </span>
-              {tripRoute.isRoadNetwork ? (
-                <span className="px-2 py-0.5 rounded-full bg-sky-600 text-white text-[10px] font-extrabold flex items-center space-x-1 shadow-xs">
-                  <span>🛣️</span>
-                  <span>Real Road Network (OSRM)</span>
-                </span>
-              ) : (
-                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold flex items-center space-x-1">
-                  <span>📐</span>
-                  <span>Direct Distance</span>
-                </span>
-              )}
-              {tripRoute.origin.isActualGps ? (
-                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center space-x-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
-                  <span>Live GPS Origin</span>
-                </span>
-              ) : (
-                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">
-                  Demo Hub Origin
-                </span>
-              )}
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-2">
-              Itinerary & Route Plan
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-500 mt-1">
-              Starting from <strong>{tripRoute.origin.label}</strong> with {tripPlaces.length} destination stops.
+  const formatStopNumber = (index: number) => {
+    const num = index + 1;
+    return num < 10 ? `0${num}` : `${num}`;
+  };
+
+  // =========================================================================
+  // EMPTY STATE: Rendered when tripPlaces.length === 0
+  // =========================================================================
+  if (tripPlaces.length === 0) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-6 animate-fadeIn py-6 px-4">
+        {/* Top Destination Header */}
+        <div className="text-center space-y-1">
+          <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-sky-50 border border-sky-100 text-sky-700 text-xs font-bold mb-1">
+            <Compass className="w-3.5 h-3.5" />
+            <span>Trip Planner</span>
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            My Trip
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-500 font-medium">
+            {destinationCity}
+          </p>
+        </div>
+
+        {/* Empty State Card */}
+        <div className="bg-white rounded-3xl border border-slate-200/90 p-8 sm:p-12 text-center shadow-xs space-y-6">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-sky-50 text-sky-600 flex items-center justify-center mx-auto shadow-inner border border-sky-100">
+            <Navigation className="w-8 h-8 sm:w-10 sm:h-10 text-sky-600" />
+          </div>
+
+          <div className="space-y-2 max-w-md mx-auto">
+            <h3 className="text-xl sm:text-2xl font-black text-slate-900">
+              Your trip is empty.
+            </h3>
+            <p className="text-sm text-slate-500 leading-relaxed">
+              Add places from Explore, Food, or Map to start planning your journey.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-            <a
-              href={googleMapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center space-x-1.5 cursor-pointer"
-              title="Open full multi-stop turn-by-turn navigation in Google Maps"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Google Maps</span>
-              <span className="sm:hidden">Nav</span>
-            </a>
-            <button
-              onClick={onNavigateToMap}
-              className="px-3.5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center space-x-1.5 cursor-pointer"
-            >
-              <MapIcon className="w-3.5 h-3.5" />
-              <span>Map View</span>
-            </button>
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
             <button
               onClick={onExploreMore}
-              className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors flex items-center space-x-1.5 cursor-pointer"
+              className="w-full sm:w-auto px-6 py-3.5 bg-sky-600 hover:bg-sky-700 text-white rounded-2xl text-xs sm:text-sm font-bold transition-all shadow-md shadow-sky-600/20 cursor-pointer flex items-center justify-center space-x-2 group"
+            >
+              <Compass className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+              <span>Explore Places</span>
+            </button>
+
+            {onNavigateToFood && (
+              <button
+                onClick={onNavigateToFood}
+                className="w-full sm:w-auto px-6 py-3.5 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl text-xs sm:text-sm font-bold transition-all shadow-md shadow-amber-500/20 cursor-pointer flex items-center justify-center space-x-2 group"
+              >
+                <Utensils className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                <span>Explore Food</span>
+              </button>
+            )}
+
+            <button
+              onClick={onNavigateToMap}
+              className="w-full sm:w-auto px-6 py-3.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-2xl text-xs sm:text-sm font-bold transition-all shadow-2xs cursor-pointer flex items-center justify-center space-x-2"
+            >
+              <MapIcon className="w-4 h-4 text-slate-500" />
+              <span>Open Map</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // ACTIVE TRIP WORKSPACE (Compact, Client-Facing, Data-Trusted)
+  // =========================================================================
+  return (
+    <div className="max-w-3xl mx-auto space-y-5 animate-fadeIn pb-12 px-2 sm:px-4">
+      {/* 1. PRIMARY TRIP SUMMARY (Compact Header) */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-6 shadow-xs space-y-4">
+        {/* Destination & Action Strip */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-sky-600 block">
+              YOUR DAY JOURNEY
+            </span>
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+              {destinationCity}
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5 flex items-center space-x-1">
+              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span>Starting from <strong>{startPointLabel}</strong></span>
+            </p>
+          </div>
+
+          {/* Quick Action Buttons */}
+          <div className="flex items-center space-x-2 self-start sm:self-auto shrink-0">
+            <button
+              onClick={onNavigateToMap}
+              className="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center space-x-1.5 cursor-pointer"
+            >
+              <MapIcon className="w-3.5 h-3.5" />
+              <span>View on Map</span>
+            </button>
+
+            <button
+              onClick={onExploreMore}
+              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center space-x-1 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Add Stop</span>
             </button>
+
+            {googleMapsUrl && (
+              <a
+                href={googleMapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Open turn-by-turn navigation in Google Maps"
+                className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all cursor-pointer"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
           </div>
         </div>
 
-        {/* 5 Summary Stat Tiles */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          {/* Tile 1: Total Distance */}
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Distance</span>
-            <div className="mt-1 flex items-baseline space-x-1">
-              <span className="text-2xl font-black text-sky-700">{tripRoute.totalDistanceKm}</span>
-              <span className="text-xs font-bold text-slate-600">km</span>
+        {/* 4 Stat Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          {/* Stops */}
+          <div className="p-3 rounded-2xl bg-slate-50/90 border border-slate-100 flex flex-col justify-between">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Stops
+            </span>
+            <div className="mt-1">
+              <span className="text-lg sm:text-xl font-black text-sky-700">
+                {tripPlaces.length}
+              </span>
+              <span className="text-xs font-bold text-slate-600 ml-1">places</span>
             </div>
             <span className="text-[10px] text-slate-400 mt-1">
-              {tripRoute.isRoadNetwork ? 'OSRM road network' : 'Haversine formula'}
+              Planned stops
             </span>
           </div>
 
-          {/* Tile 2: Estimated Travel Time */}
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Transit Time</span>
-            <div className="mt-1 flex items-baseline space-x-1">
-              {preferredMode === 'bus' ? (
-                <span className="text-base font-extrabold text-slate-500 italic">Unavailable</span>
-              ) : (
-                <span className="text-2xl font-black text-slate-800">
-                  {tripRoute.selectedModeTimeDisplay || `${tripRoute.totalTravelTimeMin} min`}
-                </span>
-              )}
+          {/* Total Distance */}
+          <div className="p-3 rounded-2xl bg-slate-50/90 border border-slate-100 flex flex-col justify-between">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Distance
+            </span>
+            <div className="mt-1">
+              <span className="text-lg sm:text-xl font-black text-slate-900">
+                {formattedDistance}
+              </span>
             </div>
             <span className="text-[10px] text-slate-400 mt-1">
-              {preferredMode === 'walk'
-                ? 'Road route walking pace'
-                : preferredMode === 'bus'
-                ? 'Route data not available'
-                : 'Estimated with traffic variance'}
+              Total journey
             </span>
           </div>
 
-          {/* Tile 3: Total Estimated Duration */}
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Duration</span>
-            <div className="mt-1 flex items-baseline space-x-1">
-              <span className="text-2xl font-black text-orange-600">{formattedTotalTime}</span>
+          {/* Travel & Visit Time */}
+          <div className="p-3 rounded-2xl bg-slate-50/90 border border-slate-100 flex flex-col justify-between">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Travel Time
+            </span>
+            <div className="mt-1">
+              <span className="text-lg sm:text-xl font-black text-slate-900">
+                {formattedTotalTime}
+              </span>
             </div>
-            <span className="text-[10px] text-slate-400 mt-1">Travel + visits</span>
-          </div>
-
-          {/* Tile 4: Transit Fare Status (Phase 9.3) */}
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Transit Fare</span>
-            <div className="mt-1 flex items-baseline space-x-1">
-              {preferredMode === 'walk' ? (
-                <>
-                  <span className="text-2xl font-black text-emerald-700">₹0</span>
-                  <span className="text-xs font-bold text-emerald-600">Free</span>
-                </>
-              ) : preferredMode === 'bus' ? (
-                <span className="text-xs font-extrabold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">
-                  Unavailable
-                </span>
-              ) : (
-                <span className="text-base sm:text-lg font-black text-slate-800">
-                  {tripRoute.selectedModeFareDisplay || 'Estimated'}
-                </span>
-              )}
-            </div>
-            <span className="text-[10px] text-slate-400 mt-1">
-              {preferredMode === 'walk'
-                ? 'Walking is always free'
-                : preferredMode === 'bus'
-                ? 'Public transit not connected'
-                : `Sum of ${tripRoute.legs.length} route ${tripRoute.legs.length === 1 ? 'leg' : 'legs'}`}
+            <span className="text-[10px] text-slate-400 mt-1 flex items-center space-x-1">
+              <Clock className="w-3 h-3 text-slate-400" />
+              <span>Travel + visits</span>
             </span>
           </div>
 
-          {/* Tile 5: Total Stops */}
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-between col-span-2 sm:col-span-1">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Total Stops</span>
-            <div className="mt-1 flex items-baseline space-x-1">
-              <span className="text-2xl font-black text-slate-800">{tripPlaces.length}</span>
-              <span className="text-xs font-bold text-slate-600">places</span>
+          {/* Estimated Total Cost */}
+          <div className="p-3 rounded-2xl bg-slate-50/90 border border-slate-100 flex flex-col justify-between">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Estimated Total
+            </span>
+            <div className="mt-1">
+              <span className="text-base sm:text-lg font-black text-slate-900 leading-tight">
+                {budgetSummary.estimatedTotalDisplay}
+              </span>
             </div>
-            <span className="text-[10px] text-slate-400 mt-1">Curated sights</span>
+            <span className="text-[10px] text-slate-400 mt-1">
+              estimated
+            </span>
           </div>
         </div>
+      </div>
 
-        {/* Preferred Travel Mode Selector for Itinerary */}
-        <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* 2. TRIP CONFIDENCE / FEASIBILITY STATUS */}
+      <div className={`p-4 rounded-2xl border text-xs transition-all ${
+        tripConfidence.isGood
+          ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+          : 'bg-amber-50/80 border-amber-200 text-amber-950'
+      }`}>
+        <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Wallet className="w-4 h-4 text-slate-400" />
-            <span className="text-xs font-bold text-slate-700">Itinerary Transit Mode:</span>
-          </div>
-          <div className="flex items-center space-x-2 overflow-x-auto pb-1 sm:pb-0">
-            {[
-              { id: 'auto', label: 'Auto Rickshaw', icon: '🛺' },
-              { id: 'cab', label: 'Cab (Ola/Uber)', icon: '🚕' },
-              { id: 'bus', label: 'Bus / Metro', icon: '🚌' },
-              { id: 'walk', label: 'Walking Only', icon: '🚶' },
-            ].map((m) => (
-              <button
-                key={m.id}
-                onClick={() => setPreferredMode(m.id as TransportMode)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-1.5 shrink-0 ${
-                  preferredMode === m.id
-                    ? 'bg-sky-600 text-white shadow-xs'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                }`}
-              >
-                <span>{m.icon}</span>
-                <span>{m.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Phase 10: Smart Schedule Feasibility Panel */}
-        <div className={`p-5 sm:p-6 rounded-3xl border transition-all ${
-          feasibility.status === 'feasible'
-            ? 'bg-emerald-50/70 border-emerald-200'
-            : feasibility.status === 'tight'
-            ? 'bg-amber-50/70 border-amber-200'
-            : 'bg-rose-50/70 border-rose-200'
-        }`}>
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-            <div className="flex items-start space-x-3.5">
-              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
-                feasibility.status === 'feasible'
-                  ? 'bg-emerald-600 text-white'
-                  : feasibility.status === 'tight'
-                  ? 'bg-amber-600 text-white'
-                  : 'bg-rose-600 text-white'
-              }`}>
-                {feasibility.status === 'feasible' ? (
-                  <CheckCircle2 className="w-6 h-6" />
-                ) : feasibility.status === 'tight' ? (
-                  <AlertTriangle className="w-6 h-6" />
-                ) : (
-                  <XCircle className="w-6 h-6" />
-                )}
-              </div>
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                    feasibility.status === 'feasible'
-                      ? 'bg-emerald-200/80 text-emerald-900'
-                      : feasibility.status === 'tight'
-                      ? 'bg-amber-200/80 text-amber-900'
-                      : 'bg-rose-200/80 text-rose-900'
-                  }`}>
-                    {feasibility.statusLabel}
-                  </span>
-                  <span className="text-xs font-bold text-slate-500">
-                    {preferences.availableHours}h Planned Window
-                  </span>
-                </div>
-                <h4 className="text-base sm:text-lg font-extrabold text-slate-900 mt-1">
-                  {feasibility.headline}
-                </h4>
-                <p className="text-xs text-slate-700 mt-1 leading-relaxed">
-                  {feasibility.explanation}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Time budget breakdown row */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-4 mt-4 border-t border-slate-200/60 text-xs">
-            <div className="p-2.5 bg-white/80 rounded-xl border border-slate-200/70">
-              <span className="text-[10px] font-bold text-slate-400 block uppercase">Transit Time</span>
-              <span className="text-sm font-black text-slate-900">{feasibility.totalTravelMinutes} min</span>
-              <span className="text-[10px] text-slate-500 block">via {preferredMode.toUpperCase()}</span>
-            </div>
-            <div className="p-2.5 bg-white/80 rounded-xl border border-slate-200/70">
-              <span className="text-[10px] font-bold text-slate-400 block uppercase">Sightseeing Visits</span>
-              <span className="text-sm font-black text-slate-900">
-                {Math.floor(feasibility.totalVisitMinutes / 60) > 0 ? `${Math.floor(feasibility.totalVisitMinutes / 60)}h ` : ''}
-                {feasibility.totalVisitMinutes % 60}m
-              </span>
-              <span className="text-[10px] text-slate-500 block">{tripPlaces.length} stops</span>
-            </div>
-            <div className="p-2.5 bg-white/80 rounded-xl border border-slate-200/70">
-              <span className="text-[10px] font-bold text-slate-400 block uppercase">Buffer Margin</span>
-              <span className="text-sm font-black text-slate-900">{feasibility.bufferMinutes} min</span>
-              <span className="text-[10px] text-slate-500 block">{preferences.pace} pace</span>
-            </div>
-            <div className="p-2.5 bg-white/80 rounded-xl border border-slate-200/70">
-              <span className="text-[10px] font-bold text-slate-400 block uppercase">Total Trip Time</span>
-              <span className="text-sm font-black text-slate-900">
-                {Math.floor(feasibility.totalTripMinutes / 60)}h {feasibility.totalTripMinutes % 60}m
-              </span>
-              <span className="text-[10px] text-slate-500 block">Door-to-door</span>
-            </div>
-            <div className="p-2.5 bg-white/80 rounded-xl border border-slate-200/70 col-span-2 sm:col-span-1">
-              <span className="text-[10px] font-bold text-slate-400 block uppercase">Schedule Margin</span>
-              <span className={`text-sm font-black ${
-                feasibility.status === 'feasible'
-                  ? 'text-emerald-700'
-                  : feasibility.status === 'tight'
-                  ? 'text-amber-700'
-                  : 'text-rose-700'
-              }`}>
-                {feasibility.status === 'exceeded'
-                  ? `+${feasibility.exceededMinutes}m Over`
-                  : `${feasibility.remainingMinutes}m Spare`}
-              </span>
-              <span className="text-[10px] text-slate-500 block">vs {preferences.availableHours}h</span>
-            </div>
-          </div>
-
-          {/* Actionable Engine Guidance */}
-          {feasibility.suggestions.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-slate-200/60 text-xs space-y-1.5">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
-                Itinerary Engine Guidance:
-              </span>
-              {feasibility.suggestions.map((sug, idx) => (
-                <div key={idx} className="flex items-start space-x-1.5 text-slate-700">
-                  <span className={`font-bold shrink-0 ${
-                    feasibility.status === 'feasible' ? 'text-emerald-600' : feasibility.status === 'tight' ? 'text-amber-600' : 'text-rose-600'
-                  }`}>•</span>
-                  <span className="leading-snug">{sug}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Route Optimization Card */}
-        <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${
-          isOptimized 
-            ? 'bg-emerald-50/70 border-emerald-200' 
-            : 'bg-sky-50/70 border-sky-200'
-        }`}>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-start space-x-3">
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                isOptimized ? 'bg-emerald-600 text-white' : 'bg-sky-600 text-white'
-              }`}>
-                {isOptimized ? <CheckCircle2 className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-slate-900">
-                  {isOptimized ? 'Route Backtracking Minimized' : 'Smart Route Optimization'}
-                </h4>
-                <p className="text-xs text-slate-600 mt-0.5">
-                  {isOptimized ? (
-                    <>
-                      Stops ordered via multi-factor itinerary engine.
-                      {distanceSavedKm > 0 && (
-                        <strong className="text-emerald-700 ml-1">
-                          Saved ~{distanceSavedKm} km of zig-zag backtracking!
-                        </strong>
-                      )}
-                    </>
-                  ) : (
-                    'Re-order stops to eliminate backtracking while prioritizing top interests and opening schedules.'
-                  )}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-2 shrink-0">
-              {isOptimized ? (
-                <button
-                  onClick={resetToManualOrder}
-                  className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold rounded-xl transition-all flex items-center space-x-1.5 cursor-pointer shadow-xs"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Revert to Added Order</span>
-                </button>
-              ) : (
-                <button
-                  onClick={optimizeTripRoute}
-                  disabled={tripPlaces.length <= 1}
-                  className="px-4 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>⚡ Optimize My Trip</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Phase 10: "Why this order?" Itinerary Rationale Card */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 space-y-3">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-            <div className="flex items-center space-x-2">
-              <span className="w-6 h-6 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-xs">
-                💡
-              </span>
-              <div>
-                <h4 className="text-sm font-extrabold text-slate-900">
-                  Why this order?
-                </h4>
-                <p className="text-[11px] text-slate-500">
-                  Deterministic explanation derived from geographic coordinates, visit times, and your preferences.
-                </p>
-              </div>
-            </div>
-            {isOptimized ? (
-              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-black rounded-md">
-                Optimized Order Active
-              </span>
-            ) : (
-              <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-md">
-                Custom Added Order
-              </span>
-            )}
-          </div>
-
-          <div className="space-y-2 text-xs text-slate-700">
-            <div className="p-2.5 bg-sky-50/60 rounded-xl border border-sky-100 text-slate-800 font-medium">
-              📍 <strong>Overall Flow:</strong> {itineraryExplanation.overallReason}
-            </div>
-
-            {itineraryExplanation.efficiencyReason && (
-              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-start space-x-2">
-                <span className="text-sky-600 font-bold shrink-0">🛣️</span>
-                <span>{itineraryExplanation.efficiencyReason}</span>
-              </div>
-            )}
-
-            {itineraryExplanation.transportReason && (
-              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 flex items-start space-x-2">
-                <span className="text-amber-600 font-bold shrink-0">🛺</span>
-                <span>{itineraryExplanation.transportReason}</span>
-              </div>
-            )}
-
-            <div className="space-y-1.5 pt-1">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
-                Stop-by-Stop Rationale:
-              </span>
-              {itineraryExplanation.stopReasons.map((sr) => (
-                <div key={sr.placeId} className="p-2.5 bg-slate-50/80 rounded-xl border border-slate-200/80 flex items-start space-x-2">
-                  <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-800 text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">
-                    {sr.stopIndex + 1}
-                  </span>
-                  <div className="flex-1">
-                    <span className="font-extrabold text-slate-900 mr-1.5">{sr.placeName}:</span>
-                    <span className="text-slate-600 leading-relaxed">{sr.reason}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Phase 9.4: Smart Transport Recommendation & Trip Budget Impact Panel */}
-      <div className="bg-white rounded-3xl border border-amber-300/80 p-6 sm:p-7 shadow-xs space-y-4 animate-fadeIn bg-gradient-to-br from-amber-500/5 via-sky-500/5 to-white">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-200/60">
-          <div>
-            <div className="flex items-center space-x-2">
-              <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-black uppercase tracking-wider flex items-center space-x-1 shadow-2xs">
-                <Sparkles className="w-3 h-3 fill-white" />
-                <span>Smart Transport Recommendation</span>
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-white text-slate-700 text-[10px] font-bold border border-slate-200">
-                Match Score: {tripRecommendation.recommended.score}/100
-              </span>
-            </div>
-            <h3 className="text-xl font-extrabold text-slate-900 mt-1">
-              Recommended Mode for Entire Itinerary
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Personalized for your {preferences.availableHours}h schedule, ₹{preferences.budgetAmount.toLocaleString('en-IN')} trip budget, and {preferences.travelStyle} travel style.
-            </p>
-          </div>
-
-          {preferredMode !== tripRecommendation.recommended.mode ? (
-            <button
-              type="button"
-              onClick={() => setPreferredMode(tripRecommendation.recommended.mode)}
-              className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-black rounded-xl shadow-xs transition-all self-start sm:self-auto cursor-pointer flex items-center space-x-1.5"
-            >
-              <span>Apply {tripRecommendation.recommended.modeLabel} to Route →</span>
-            </button>
-          ) : (
-            <span className="px-3 py-1.5 rounded-xl bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-black flex items-center space-x-1 self-start sm:self-auto">
-              <CheckCircle2 className="w-4 h-4 text-emerald-700" />
-              <span>Recommended Mode Active</span>
-            </span>
-          )}
-        </div>
-
-        {/* Highlight Card */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white/90 border border-amber-200/80 shadow-2xs">
-          <div className="flex items-center space-x-3.5">
-            <div className="w-14 h-14 rounded-2xl bg-amber-500 text-white text-3xl flex items-center justify-center shrink-0 shadow-sm">
-              {tripRecommendation.recommended.icon}
-            </div>
-            <div>
-              <div className="flex flex-wrap items-baseline gap-2">
-                <h4 className="text-lg font-black text-slate-900">
-                  {tripRecommendation.recommended.modeLabel}
-                </h4>
-                <span className="text-xs font-extrabold text-amber-900 bg-amber-100/90 px-2.5 py-0.5 rounded-md">
-                  {tripRecommendation.recommended.tagline}
-                </span>
-              </div>
-              <div className="flex items-center space-x-2 text-xs text-slate-600 mt-1 font-semibold">
-                <span className="text-slate-900 font-black">{tripRecommendation.recommended.travelTimeDisplay}</span>
-                <span>•</span>
-                <span className="font-black text-slate-900">{tripRecommendation.recommended.fareEstimate.fareDisplay}</span>
-                <span>•</span>
-                <span>{tripRoute.totalDistanceKm} km total trip</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Trip Budget Impact Breakdown */}
-        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/90 text-xs space-y-2">
-          <div className="flex items-center justify-between font-bold text-slate-800">
-            <span className="flex items-center space-x-1.5">
-              <Wallet className="w-3.5 h-3.5 text-sky-600" />
-              <span>Trip Budget vs Estimated Transport Cost</span>
-            </span>
-            <span className="text-[10px] text-slate-500 font-semibold">
-              Configured Trip Budget: ₹{preferences.budgetAmount.toLocaleString('en-IN')}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-            <div className="p-3 bg-white rounded-xl border border-slate-200">
-              <span className="text-[10px] font-bold text-slate-400 block uppercase">Configured Trip Budget</span>
-              <span className="text-base font-black text-slate-900">₹{preferences.budgetAmount.toLocaleString('en-IN')}</span>
-              <span className="text-[10px] text-slate-500 block mt-0.5">Total plan allowance</span>
-            </div>
-
-            <div className="p-3 bg-white rounded-xl border border-slate-200">
-              <span className="text-[10px] font-bold text-slate-400 block uppercase">Estimated Transport ({tripRecommendation.recommended.modeLabel.split(' ')[0]})</span>
-              <span className="text-base font-black text-slate-900">
-                {tripRecommendation.recommended.fareEstimate.fareDisplay}
-              </span>
-              <span className="text-[10px] text-slate-500 block mt-0.5">
-                ~{tripRecommendation.budgetImpact.percentOfBudget}% of trip budget
-              </span>
-            </div>
-
-            <div className="p-3 bg-white rounded-xl border border-slate-200">
-              <span className="text-[10px] font-bold text-slate-400 block uppercase">Remaining for Sights & Dining</span>
-              <span className={`text-base font-black ${
-                tripRecommendation.budgetImpact.remainingBudgetMinInr > 0 ? 'text-emerald-700' : 'text-amber-700'
-              }`}>
-                {tripRecommendation.recommended.mode === 'walk'
-                  ? `₹${preferences.budgetAmount.toLocaleString('en-IN')}`
-                  : `₹${tripRecommendation.budgetImpact.remainingBudgetMinInr.toLocaleString('en-IN')}–₹${tripRecommendation.budgetImpact.remainingBudgetMaxInr.toLocaleString('en-IN')}`}
-              </span>
-              <span className="text-[10px] text-slate-500 block mt-0.5">
-                Buffer for entry tickets & food
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Why this mode was recommended */}
-        <div className="pt-1 space-y-1.5 text-xs">
-          <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
-            Why this mode fits your itinerary:
-          </span>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {tripRecommendation.recommended.matchReasons.map((reason, idx) => (
-              <div key={idx} className="flex items-start space-x-1.5 text-[11px] bg-white/80 p-2.5 rounded-xl border border-slate-100">
-                <span className="text-emerald-600 font-bold shrink-0">✓</span>
-                <span className="leading-snug text-slate-700">{reason}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Alternatives Strip */}
-        {tripRecommendation.alternatives.length > 0 && (
-          <div className="pt-2 border-t border-slate-200 flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-              Viable Alternatives:
-            </span>
-            {tripRecommendation.alternatives.map((alt) => (
-              <button
-                key={alt.mode}
-                type="button"
-                onClick={() => setPreferredMode(alt.mode)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center space-x-1.5 ${
-                  preferredMode === alt.mode
-                    ? 'bg-sky-600 text-white border-sky-600 shadow-2xs font-extrabold'
-                    : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
-                }`}
-              >
-                <span>{alt.icon}</span>
-                <span>{alt.modeLabel}:</span>
-                <span className={preferredMode === alt.mode ? 'text-white' : 'text-slate-600 font-semibold'}>
-                  {alt.fareEstimate.fareDisplay}
-                </span>
-                <span className="text-[10px] opacity-75">
-                  ({alt.role === 'budget' ? 'Budget option' : 'Faster alternative'})
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Phase 9.3: Dedicated Multi-Stop Trip Fare Estimate Card */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 shadow-xs space-y-4 animate-fadeIn">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-          <div>
-            <div className="flex items-center space-x-2">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-sky-600 block">
-                Trip Fare Estimate
-              </span>
-              <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-extrabold">
-                Per-Leg Calculation
-              </span>
-            </div>
-            <h3 className="text-xl font-extrabold text-slate-900 mt-0.5">
-              Multi-Stop Cost Breakdown
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Calculated individually per route leg, then summed. Not a live booking quote.
-            </p>
-          </div>
-
-          {/* Mode Switcher Buttons */}
-          <div className="flex items-center space-x-1.5 self-start sm:self-auto overflow-x-auto pb-1 sm:pb-0">
-            {([
-              { id: 'auto' as const, label: 'Auto', icon: '🛺' },
-              { id: 'cab' as const, label: 'Cab', icon: '🚕' },
-              { id: 'walk' as const, label: 'Walk', icon: '🚶' },
-              { id: 'bus' as const, label: 'Bus', icon: '🚌' },
-            ]).map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => setPreferredMode(m.id)}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center space-x-1 shrink-0 ${
-                  preferredMode === m.id
-                    ? 'bg-sky-600 text-white shadow-xs font-black'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                }`}
-              >
-                <span>{m.icon}</span>
-                <span>{m.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Leg-by-leg Fare Rows */}
-        <div className="space-y-2.5">
-          {tripRoute.legs.map((leg, lIdx) => {
-            const legFare = leg.modeEstimates[preferredMode];
-            const modeIcon = preferredMode === 'walk' ? '🚶' : preferredMode === 'auto' ? '🛺' : preferredMode === 'cab' ? '🚕' : '🚌';
-            const modeName = preferredMode === 'walk' ? 'Walking' : preferredMode === 'auto' ? 'Auto' : preferredMode === 'cab' ? 'Cab' : 'Bus';
-
-            return (
-              <div
-                key={lIdx}
-                className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs"
-              >
-                <div className="flex items-center space-x-2.5">
-                  <span className="w-6 h-6 rounded-lg bg-sky-100 text-sky-800 font-black text-[11px] flex items-center justify-center shrink-0">
-                    L{lIdx + 1}
-                  </span>
-                  <div>
-                    <div className="font-extrabold text-slate-900 flex items-center space-x-1.5">
-                      <span className="truncate max-w-[120px] sm:max-w-[200px]">{leg.fromName}</span>
-                      <span className="text-slate-400">→</span>
-                      <span className="truncate max-w-[120px] sm:max-w-[200px]">{leg.toName}</span>
-                    </div>
-                    <span className="text-[10px] text-slate-500 font-medium">
-                      {leg.distanceKm} km {leg.isRoadNetwork ? 'road route' : 'direct'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-3 self-end sm:self-auto">
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-400 font-semibold block">
-                      {modeIcon} {modeName}
-                    </span>
-                    <span className={`font-black text-xs sm:text-sm ${
-                      preferredMode === 'walk' ? 'text-emerald-700' : preferredMode === 'bus' ? 'text-slate-500 italic' : 'text-slate-900'
-                    }`}>
-                      {preferredMode === 'walk'
-                        ? 'Free (₹0)'
-                        : preferredMode === 'bus'
-                        ? 'Unavailable'
-                        : legFare?.fareDisplay || 'Estimated'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Total Summary Footer */}
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-sky-50 to-indigo-50/60 border border-sky-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-sky-700 block">
-              Estimated Trip Total
-            </span>
-            <div className="text-xs text-slate-600 mt-0.5">
-              {tripRoute.legs.length > 1 ? (
-                <span>
-                  Sum of {tripRoute.legs.length} route legs ({tripRoute.legs.map((_, i) => `Leg ${i + 1}`).join(' + ')})
-                </span>
-              ) : (
-                <span>Direct single leg route</span>
-              )}
-            </div>
-          </div>
-
-          <div className="text-left sm:text-right">
-            <div className={`text-xl font-black ${
-              preferredMode === 'walk' ? 'text-emerald-700' : preferredMode === 'bus' ? 'text-slate-500 italic text-base' : 'text-slate-900'
+            <span className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full font-black text-xs ${
+              tripConfidence.isGood ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'
             }`}>
-              {preferredMode === 'walk'
-                ? 'Free (₹0)'
-                : preferredMode === 'bus'
-                ? 'Unavailable'
-                : tripRoute.selectedModeFareDisplay || 'Estimated'}
-            </div>
-            <span className="text-[10px] text-slate-500 font-semibold block">
-              {preferredMode === 'walk' ? 'Walking is 100% free' : preferredMode === 'bus' ? 'GTFS transit lines not connected' : 'Excludes live surge & tolls'}
+              {tripConfidence.isGood ? (
+                <ShieldCheck className="w-3.5 h-3.5" />
+              ) : (
+                <AlertTriangle className="w-3.5 h-3.5" />
+              )}
+              <span>{tripConfidence.badgeText}</span>
+            </span>
+            <span className="font-semibold text-slate-700">
+              {tripConfidence.isGood
+                ? 'All stops fit comfortably into your schedule, weather, and budget.'
+                : 'Review a few suggestions to keep your journey smooth:'}
             </span>
           </div>
         </div>
 
-        {/* Small How Estimated Toggle */}
-        <div className="pt-1 flex items-center justify-between text-xs text-slate-500">
-          <div className="flex items-center space-x-1.5 text-[11px]">
-            <Info className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-            <span>Fares are approximate models, not live Ola/Uber booking quotes.</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowFareAssumptions(!showFareAssumptions)}
-            className="text-[11px] font-bold text-sky-700 hover:text-sky-900 flex items-center space-x-1 cursor-pointer select-none"
-          >
-            <span>{showFareAssumptions ? 'Hide assumptions' : 'Fare assumptions'}</span>
-            {showFareAssumptions ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          </button>
-        </div>
-
-        {showFareAssumptions && (
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 space-y-1.5 animate-fadeIn">
-            <div className="font-bold text-slate-800">Phase 9.3 Centralized Assumptions:</div>
-            <div>• <strong>Auto Rickshaw:</strong> Base ₹35 (first 1.5 km) + ₹16/km (city) with ±15% traffic variance. Calculated leg-by-leg.</div>
-            <div>• <strong>Cab (Ola/Uber):</strong> Base ₹75 (first 2 km) + ₹18/km with traffic range. Live surge, waiting time, and highway tolls excluded.</div>
-            <div>• <strong>Multi-Stop Aggregation:</strong> Each leg is evaluated separately with its own base fare and distance, then summed.</div>
-            <div>• <strong>Walking:</strong> Always Free (₹0). <strong>Bus/Metro:</strong> Marked as unavailable until actual GTFS line feeds are connected.</div>
-          </div>
+        {!tripConfidence.isGood && tripConfidence.reasons.length > 0 && (
+          <ul className="mt-2.5 space-y-1 pl-4 border-t border-amber-200/60 pt-2 text-[11px] text-amber-900 list-disc">
+            {tripConfidence.reasons.map((r, i) => (
+              <li key={i} className="font-medium">{r}</li>
+            ))}
+          </ul>
         )}
       </div>
 
-      {/* Phase 9.1: Featured Transport Mode Comparison Card */}
-      {(() => {
-        const defaultLegIndex = tripRoute.legs.length > 1 ? 1 : 0;
-        const activeIdx = Math.min(
-          selectedLegIndexForComparison ?? defaultLegIndex,
-          Math.max(0, tripRoute.legs.length - 1)
-        );
-        const compLeg = tripRoute.legs[activeIdx] || tripRoute.legs[0];
-
-        if (!compLeg) return null;
-
-        return (
-          <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-7 shadow-xs space-y-4 animate-fadeIn">
-            {tripRoute.legs.length > 1 && (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
-                <span className="text-xs font-bold text-slate-700">
-                  Select itinerary leg to inspect:
-                </span>
-                <select
-                  value={activeIdx}
-                  onChange={(e) => setSelectedLegIndexForComparison(Number(e.target.value))}
-                  className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 cursor-pointer shadow-2xs focus:ring-2 focus:ring-sky-500 outline-none"
-                >
-                  {tripRoute.legs.map((leg, lIdx) => (
-                    <option key={lIdx} value={lIdx}>
-                      Leg {lIdx + 1}: {leg.fromName} → {leg.toName} ({leg.distanceKm} km)
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <TransportComparisonCard
-              fromName={compLeg.fromName}
-              toName={compLeg.toName}
-              distanceKm={compLeg.distanceKm}
-              isRoadNetwork={compLeg.isRoadNetwork}
-              selectedMode={preferredMode}
-              onSelectMode={(mode) => setPreferredMode(mode)}
-              roadDrivingTimeMin={compLeg.isRoadNetwork ? compLeg.estimatedTravelTimeMin : undefined}
-            />
+      {/* 3. COMPACT TRIP BUDGET SUMMARY */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 p-4 sm:p-5 shadow-xs text-xs space-y-3">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+          <div className="flex items-center space-x-2">
+            <Wallet className="w-4 h-4 text-sky-600" />
+            <span className="font-black text-slate-900 uppercase tracking-wider text-[11px]">
+              TRIP COST
+            </span>
           </div>
-        );
-      })()}
-
-      {/* Sequential Route Timeline */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-6">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-          <h3 className="font-extrabold text-slate-900 text-lg">Step-by-Step Waypoint Timeline</h3>
-          <button
-            onClick={clearTrip}
-            className="text-xs font-semibold text-rose-600 hover:text-rose-700 transition-colors cursor-pointer"
-          >
-            Clear All Stops
-          </button>
+          <span className="text-[10px] text-slate-400 font-medium">
+            Approximate estimates
+          </span>
         </div>
 
-        {/* 1. Origin Marker */}
-        <div className="relative pl-10 sm:pl-12">
-          {/* Timeline Node */}
-          <div className="absolute left-0 top-1 w-7 h-7 rounded-full bg-sky-600 text-white flex items-center justify-center font-bold text-xs ring-4 ring-sky-100 shadow-sm">
-            <MapPin className="w-3.5 h-3.5" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+          <div>
+            <span className="text-[10px] text-slate-400 uppercase font-bold block">Travel</span>
+            <span className="text-sm font-black text-slate-900 block mt-0.5">
+              {budgetSummary.travelDisplay}
+            </span>
+            <span className="text-[10px] text-slate-400">via {activeDetails.label}</span>
           </div>
 
-          <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <span className="text-[10px] text-slate-400 uppercase font-bold block">Estimated total</span>
+            <span className="text-sm font-black text-slate-900 block mt-0.5">
+              {budgetSummary.estimatedTotalDisplay}
+            </span>
+            <span className="text-[10px] text-slate-400">travel + activities</span>
+          </div>
+
+          <div>
+            <span className="text-[10px] text-slate-400 uppercase font-bold block">Budget</span>
+            <span className="text-sm font-black text-slate-900 block mt-0.5">
+              {budgetSummary.userBudgetDisplay}
+            </span>
+            <span className="text-[10px] text-slate-400">your profile limit</span>
+          </div>
+
+          <div>
+            <span className="text-[10px] text-slate-400 uppercase font-bold block">Remaining</span>
+            <span className={`text-sm font-black block mt-0.5 ${budgetSummary.isOverBudget ? 'text-rose-600' : 'text-emerald-700'}`}>
+              {budgetSummary.remainingDisplay}
+            </span>
+            <span className="text-[10px] text-slate-400">available funds</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. WEATHER-AWARE TRAVEL INTELLIGENCE */}
+      <WeatherTripAlert
+        weatherImpact={weatherImpact}
+        currentStops={tripPlaces}
+        activeTransport={activeTransport}
+        onApplyOrderSuggestion={(newOrderIds) => reorderTripStops(newOrderIds)}
+        onSwitchTransport={(mode) => setSelectedTransport(mode)}
+      />
+
+      {/* 5. TRANSPORT SELECTION & RECOMMENDATION */}
+      <div className={`rounded-3xl border p-4 sm:p-5 shadow-xs space-y-4 transition-all ${
+        isCustomSelected
+          ? 'bg-white border-sky-200/90'
+          : 'bg-white border-amber-200/90'
+      }`}>
+        {/* Active Transport Overview */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start space-x-3.5">
+            <div className={`w-11 h-11 rounded-2xl border text-2xl flex items-center justify-center shrink-0 shadow-2xs ${
+              isCustomSelected
+                ? 'bg-sky-50 border-sky-200/80 text-sky-700'
+                : 'bg-amber-50 border-amber-200/80 text-amber-700'
+            }`}>
+              {activeDetails.icon}
+            </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="px-2 py-0.5 rounded-md bg-sky-600 text-white text-[10px] font-black tracking-wide">
-                  {schedule.originDepartureStr} START
+                <span className={`text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                  isCustomSelected
+                    ? 'bg-sky-100 text-sky-800'
+                    : 'bg-amber-100/90 text-amber-800'
+                }`}>
+                  {isCustomSelected ? 'Your transport' : 'Recommended'}
                 </span>
-                <span className="text-[10px] font-bold text-sky-700 uppercase tracking-wider">Departure Point</span>
+                <span className="text-[11px] font-bold text-slate-500">
+                  {formattedDistance} total
+                </span>
               </div>
-              <h4 className="text-sm font-extrabold text-slate-900 mt-1">{tripRoute.origin.label}</h4>
-              <p className="text-xs text-slate-500">
-                Coordinates: {tripRoute.origin.lat.toFixed(4)}° N, {tripRoute.origin.lon.toFixed(4)}° E
+              <h3 className="text-base sm:text-lg font-black text-slate-900 mt-0.5">
+                {activeDetails.label}
+              </h3>
+              <p className="text-xs text-slate-600 font-medium">
+                {activeHeadline}
               </p>
             </div>
-            <span className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-[11px] font-bold text-slate-600 self-start sm:self-auto">
-              Starting Location
+          </div>
+
+          <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
+            <div className="text-left sm:text-right">
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">Travel cost:</span>
+              <span className="text-sm sm:text-base font-black text-slate-900">
+                {budgetSummary.travelDisplay}
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-500 font-semibold sm:mt-0.5">
+              {activeTransport === 'bus'
+                ? 'Transit time unavailable'
+                : `~${tripRoute.selectedModeTimeDisplay || `${tripRoute.totalTravelTimeMin} min`} transit`}
             </span>
           </div>
         </div>
 
-        {/* Leg 0 (Origin -> Stop 1) and Stops */}
+        {/* Restore Recommended Banner */}
+        {isCustomSelected && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs animate-fadeIn">
+            <div className="flex items-center space-x-2">
+              <span className="text-base shrink-0">{recommendedDetails.icon}</span>
+              <div className="text-amber-950 font-medium">
+                Recommended: <strong>{recommendedDetails.label}</strong> ({tripRecommendation?.recommended?.tagline || recommendedDetails.summaryHeadline})
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={resetToRecommendedTransport}
+              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold transition-all shrink-0 cursor-pointer shadow-xs text-xs flex items-center space-x-1.5 self-start sm:self-auto"
+            >
+              <span>Switch to recommended</span>
+              <span>↺</span>
+            </button>
+          </div>
+        )}
+
+        {/* Why this transport option is active */}
+        <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 text-xs space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+              Why this transport:
+            </span>
+            {tripRecommendation?.recommended?.matchReasons && tripRecommendation.recommended.matchReasons.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowTransportDetails(!showTransportDetails)}
+                className="text-[11px] font-bold text-sky-700 hover:text-sky-900 cursor-pointer"
+              >
+                {showTransportDetails ? 'Hide details' : 'Details'}
+              </button>
+            )}
+          </div>
+          <p className="text-slate-700 leading-relaxed font-medium">
+            {activeReason}
+          </p>
+
+          {showTransportDetails && tripRecommendation?.recommended?.matchReasons && (
+            <div className="pt-2 mt-2 border-t border-slate-200/60 space-y-1 text-[11px] animate-fadeIn">
+              {tripRecommendation.recommended.matchReasons.map((r, i) => (
+                <div key={i} className="flex items-start space-x-1.5 text-slate-600">
+                  <span className="text-emerald-600 font-bold shrink-0">✓</span>
+                  <span>{r}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Transport Option Cards */}
+        <div className="pt-2 border-t border-slate-100 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+              Choose Transport Mode:
+            </span>
+            <span className="text-[11px] text-slate-400">
+              Click to select active transit
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              { id: 'auto' as TransportMode, label: 'Auto Rickshaw', icon: '🛺' },
+              { id: 'cab' as TransportMode, label: 'Cab (Ola/Uber)', icon: '🚕' },
+              { id: 'walk' as TransportMode, label: 'Walking', icon: '🚶' },
+              { id: 'bus' as TransportMode, label: 'Bus / Metro', icon: '🚌' },
+            ].map((m) => {
+              const isActive = activeTransport === m.id;
+              const isRec = recommendedMode === m.id;
+              const metric = modeMetrics[m.id];
+
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setSelectedTransport(m.id)}
+                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between relative ${
+                    isActive
+                      ? 'bg-sky-50/80 border-sky-500 ring-2 ring-sky-200 shadow-xs'
+                      : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between w-full mb-1">
+                    <span className="text-xl">{m.icon}</span>
+                    <div className="flex flex-col items-end space-y-0.5">
+                      {isActive && (
+                        <span className="px-1.5 py-0.5 rounded bg-sky-600 text-white text-[9px] font-black uppercase tracking-wider flex items-center space-x-0.5">
+                          <CheckCircle2 className="w-2.5 h-2.5 inline" />
+                          <span>Active</span>
+                        </span>
+                      )}
+                      {isRec && !isActive && (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-200 text-[9px] font-black uppercase tracking-wider">
+                          Recommended
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-1">
+                    <span className={`text-xs block ${isActive ? 'font-black text-sky-950' : 'font-bold text-slate-800'}`}>
+                      {m.label}
+                    </span>
+                    <span className={`text-[11px] block mt-0.5 ${isActive ? 'font-extrabold text-sky-800' : 'font-semibold text-slate-900'}`}>
+                      {metric.fare}
+                    </span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">
+                      ~{metric.timeDisplay}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* 6. ITINERARY TIMELINE (Main Flow) */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 p-5 sm:p-6 shadow-xs space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+          <div>
+            <h3 className="text-lg font-black text-slate-900">
+              Trip Itinerary
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Scheduled sequence from start to return via {activeDetails.label}
+            </p>
+          </div>
+
+          <div className="flex items-center space-x-3 self-end sm:self-auto">
+            {isOptimized ? (
+              <button
+                type="button"
+                onClick={resetToManualOrder}
+                className="text-xs font-bold text-slate-500 hover:text-slate-700 flex items-center space-x-1 cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Revert order</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={optimizeTripRoute}
+                disabled={tripPlaces.length <= 1}
+                className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer flex items-center space-x-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Optimize My Trip</span>
+              </button>
+            )}
+
+            <button
+              onClick={clearTrip}
+              className="text-xs font-semibold text-rose-600 hover:text-rose-700 cursor-pointer px-2 py-1 rounded-lg hover:bg-rose-50"
+            >
+              Clear Trip
+            </button>
+          </div>
+        </div>
+
+        {/* START Point */}
+        <div className="relative pl-9 sm:pl-11">
+          <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full bg-sky-600 text-white flex items-center justify-center font-bold text-xs ring-4 ring-sky-100 shadow-2xs">
+            <MapPin className="w-3 h-3" />
+          </div>
+
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="px-2 py-0.5 rounded-md bg-sky-600 text-white text-[10px] font-black">
+                  START
+                </span>
+                <span className="font-bold text-slate-700">
+                  {schedule.originDepartureStr}
+                </span>
+              </div>
+              <h4 className="text-sm font-extrabold text-slate-900 mt-1">
+                {startPointLabel}
+              </h4>
+            </div>
+            <span className="text-[11px] text-slate-400 font-medium">
+              Departure Point
+            </span>
+          </div>
+        </div>
+
+        {/* Sequence Stops */}
         {tripPlaces.map((place, index) => {
           const leg = tripRoute.legs[index];
           const isFirst = index === 0;
           const isLast = index === tripPlaces.length - 1;
-          const isExpanded = expandedLegIndex === index;
           const stopSched = schedule.stops[index];
-          const prevDeparture = index === 0 ? schedule.originDepartureStr : schedule.stops[index - 1]?.departureTimeStr || '09:00';
 
           return (
             <React.Fragment key={place.id}>
-              {/* Route Leg Connecting Path */}
+              {/* Connecting Transit Leg */}
               {leg && (
-                <div className="relative pl-10 sm:pl-12 py-1 my-1">
-                  {/* Vertical connecting line */}
-                  <div className="absolute left-3.5 top-0 bottom-0 w-0.5 bg-gradient-to-b from-sky-400 via-sky-300 to-sky-400 -translate-x-1/2"></div>
+                <div className="relative pl-9 sm:pl-11 py-1">
+                  <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gradient-to-b from-sky-400 to-sky-300 -translate-x-1/2"></div>
 
-                  <div className="bg-sky-50/70 border border-sky-100 rounded-2xl p-3 sm:p-4 my-2 text-xs space-y-2.5">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-1.5 text-sky-950">
-                        <ArrowDown className="w-4 h-4 text-sky-600 shrink-0" />
-                        <span className="px-1.5 py-0.5 bg-sky-200/80 rounded text-[10px] font-black text-sky-900">
-                          Depart {prevDeparture}
-                        </span>
-                        <span className="font-extrabold">Leg {index + 1}:</span>
-                        <span className="truncate max-w-[130px] sm:max-w-none">{leg.fromName} → {leg.toName}</span>
-                        <span className="font-black text-sky-700 bg-sky-100 px-2 py-0.5 rounded-md">
-                          {formatDistanceKm(leg.distanceKm)}
-                        </span>
-                        {leg.isRoadNetwork && (
-                          <span className="text-[9px] font-extrabold text-sky-700 bg-sky-200/60 px-1.5 py-0.5 rounded">
-                            🛣️ Road
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center space-x-2">
-                        <span className="text-[11px] font-bold text-slate-700">
-                          {leg.estimatedTravelTimeMin}m via {preferredMode.toUpperCase()}
-                          {preferredMode === 'walk' ? ' · Free' : preferredMode === 'bus' ? '' : ` · ${leg.modeEstimates[preferredMode]?.fareDisplay || ''}`}
-                        </span>
-                        {leg.maneuvers && leg.maneuvers.length > 0 && (
-                          <button
-                            onClick={() => toggleManeuversExpand(index)}
-                            className="text-[11px] font-bold text-emerald-700 hover:text-emerald-900 flex items-center space-x-1 underline cursor-pointer"
-                          >
-                            <Compass className="w-3 h-3" />
-                            <span>{expandedManeuversLegIndex === index ? 'Hide Steps' : `Steps (${leg.maneuvers.length})`}</span>
-                          </button>
-                        )}
-                        <button
-                          onClick={() => toggleLegExpand(index)}
-                          className="text-[11px] font-bold text-sky-600 hover:text-sky-800 underline cursor-pointer"
-                        >
-                          {isExpanded ? 'Hide Modes' : 'Compare Modes'}
-                        </button>
-                      </div>
+                  <div className="p-2.5 bg-sky-50/60 rounded-xl border border-sky-100 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 my-1">
+                    <div className="flex items-center space-x-2 text-slate-700">
+                      <ArrowDown className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                      <span className="font-extrabold text-slate-900">
+                        ↓ {leg.estimatedTravelTimeMin} min by {activeDetails.label}
+                      </span>
+                      <span className="text-slate-400">•</span>
+                      <span className="text-slate-500 font-medium">
+                        {formatDistanceKm(leg.distanceKm)}
+                      </span>
                     </div>
 
-                    {/* Mode Breakdown Strip */}
-                    <div className="flex items-center space-x-2 text-[11px] text-slate-600 overflow-x-auto pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setPreferredMode('walk')}
-                        className={`flex items-center space-x-1 px-2.5 py-1 rounded-xl transition-all cursor-pointer ${
-                          preferredMode === 'walk'
-                            ? 'bg-emerald-600 text-white font-extrabold shadow-2xs'
-                            : 'bg-white hover:bg-slate-100 border border-slate-200'
-                        }`}
-                      >
-                        <Footprints className="w-3.5 h-3.5" />
-                        <span>Walk: {leg.modeEstimates.walk.timeMin}m · Free</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setPreferredMode('auto')}
-                        className={`flex items-center space-x-1 px-2.5 py-1 rounded-xl transition-all cursor-pointer ${
-                          preferredMode === 'auto'
-                            ? 'bg-amber-600 text-white font-extrabold shadow-2xs'
-                            : 'bg-white hover:bg-slate-100 border border-slate-200'
-                        }`}
-                      >
-                        <span>🛺</span>
-                        <span>Auto: {leg.modeEstimates.auto.timeDisplay || `${leg.modeEstimates.auto.timeMin}m`} · {leg.modeEstimates.auto.fareDisplay}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setPreferredMode('cab')}
-                        className={`flex items-center space-x-1 px-2.5 py-1 rounded-xl transition-all cursor-pointer ${
-                          preferredMode === 'cab'
-                            ? 'bg-indigo-600 text-white font-extrabold shadow-2xs'
-                            : 'bg-white hover:bg-slate-100 border border-slate-200'
-                        }`}
-                      >
-                        <Car className="w-3.5 h-3.5" />
-                        <span>Cab: {leg.modeEstimates.cab.timeDisplay || `${leg.modeEstimates.cab.timeMin}m`} · {leg.modeEstimates.cab.fareDisplay}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setPreferredMode('bus')}
-                        className={`flex items-center space-x-1 px-2.5 py-1 rounded-xl transition-all cursor-pointer ${
-                          preferredMode === 'bus'
-                            ? 'bg-sky-600 text-white font-extrabold shadow-2xs'
-                            : 'bg-white hover:bg-slate-100 border border-slate-200'
-                        }`}
-                      >
-                        <Bus className="w-3.5 h-3.5" />
-                        <span>Bus: Unavailable</span>
-                      </button>
+                    <div className="flex items-center space-x-2 self-end sm:self-auto text-[11px]">
+                      {activeTransport === 'walk' ? (
+                        <span className="font-bold text-emerald-700">
+                          Free (₹0)
+                        </span>
+                      ) : activeTransport === 'bus' ? (
+                        <span className="font-bold text-slate-400 italic">
+                          Fare unavailable
+                        </span>
+                      ) : (
+                        <span className="font-bold text-slate-700">
+                          {leg.modeEstimates[activeTransport]?.fareDisplay || ''} estimated
+                        </span>
+                      )}
                     </div>
-
-                    {/* Expanded Transit Comparison Table / Card */}
-                    {isExpanded && (
-                      <div className="pt-2 border-t border-sky-200/60 animate-fadeIn">
-                        <TransportComparisonCard
-                          hideHeader
-                          fromName={leg.fromName}
-                          toName={leg.toName}
-                          distanceKm={leg.distanceKm}
-                          isRoadNetwork={leg.isRoadNetwork}
-                          selectedMode={preferredMode}
-                          onSelectMode={(mode) => setPreferredMode(mode)}
-                          roadDrivingTimeMin={leg.isRoadNetwork ? leg.estimatedTravelTimeMin : undefined}
-                        />
-                      </div>
-                    )}
-
-                    {/* Collapsible Turn-by-Turn Maneuvers */}
-                    {expandedManeuversLegIndex === index && leg.maneuvers && leg.maneuvers.length > 0 && (
-                      <div className="pt-2 border-t border-sky-200/60 space-y-2 animate-fadeIn">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-slate-800 flex items-center space-x-1">
-                            <Compass className="w-3.5 h-3.5 text-sky-600" />
-                            <span>Turn-by-Turn Road Directions ({leg.maneuvers.length} steps)</span>
-                          </span>
-                          <span className="text-[10px] text-slate-500 font-medium">via OpenStreetMap</span>
-                        </div>
-                        <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
-                          {leg.maneuvers.map((m, mIdx) => (
-                            <div
-                              key={mIdx}
-                              className="text-xs flex items-start space-x-2.5 bg-white p-2.5 rounded-xl border border-slate-200/80 shadow-2xs"
-                            >
-                              <span className="w-5 h-5 rounded-full bg-sky-100 text-sky-800 text-[10px] font-extrabold flex items-center justify-center shrink-0 mt-0.5">
-                                {mIdx + 1}
-                              </span>
-                              <div className="flex-1 flex items-baseline justify-between gap-2">
-                                <span className="text-slate-800 font-medium leading-relaxed">{m.instruction}</span>
-                                {m.distanceMeters > 0 && (
-                                  <span className="text-[10px] font-bold text-slate-500 shrink-0">
-                                    {m.distanceMeters >= 1000
-                                      ? `${(m.distanceMeters / 1000).toFixed(1)} km`
-                                      : `${Math.round(m.distanceMeters)} m`}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
 
-              {/* Stop Node */}
-              <div className="relative pl-10 sm:pl-12">
-                {/* Timeline Number Badge */}
-                <div className="absolute left-0 top-3 w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center font-extrabold text-xs ring-4 ring-orange-100 shadow-sm">
-                  {index + 1}
+              {/* Stop Card */}
+              <div className="relative pl-9 sm:pl-11">
+                {/* 2-Digit Stop Badge */}
+                <div className="absolute left-0 top-3 w-6 h-6 rounded-full bg-orange-500 text-white flex items-center justify-center font-black text-xs ring-4 ring-orange-100 shadow-2xs">
+                  {formatStopNumber(index)}
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs hover:border-slate-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="bg-white border border-slate-200/90 rounded-2xl p-4 shadow-xs hover:border-slate-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-start space-x-3.5">
-                    <img
-                      src={place.imageUrl}
-                      alt={place.name}
-                      className="w-16 h-16 rounded-xl object-cover shrink-0 border border-slate-200 shadow-2xs"
-                    />
-                    <div className="space-y-1.5">
-                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                          Stop {index + 1}
-                        </span>
+                    {place.imageUrl ? (
+                      <img
+                        src={place.imageUrl}
+                        alt={place.name}
+                        className="w-16 h-16 rounded-xl object-cover shrink-0 border border-slate-200 shadow-2xs"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-orange-50 to-amber-100 border border-orange-200/80 flex items-center justify-center text-2xl shrink-0 shadow-2xs select-none">
+                        📍
+                      </div>
+                    )}
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <span className="text-[11px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">
-                          {place.categoryLabel}
+                          {place.categoryLabel || place.category}
                         </span>
-                        {place.matchScore && (
-                          <span className="text-[11px] font-extrabold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full">
-                            {place.matchScore}% Match
-                          </span>
-                        )}
-                        {/* Opening Hours Badge (Data Honesty) */}
-                        {stopSched && (
+                        {stopSched?.openStatus && (
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
                             stopSched.openStatus === 'open'
                               ? 'bg-emerald-100 text-emerald-800'
                               : stopSched.openStatus === 'closed'
                               ? 'bg-rose-100 text-rose-800'
                               : 'bg-slate-100 text-slate-600'
-                          }`} title={stopSched.openStatusDetail || stopSched.openStatusLabel}>
-                            {stopSched.openStatus === 'open' ? '🟢 ' : stopSched.openStatus === 'closed' ? '🔴 ' : '⚪ '}
-                            {stopSched.openStatusLabel}
+                          }`}>
+                            {stopSched.openStatus === 'open' ? '🟢 Open' : stopSched.openStatus === 'closed' ? '🔴 Closed' : '⚪ Status'}
                           </span>
                         )}
                       </div>
 
-                      <h4 className="text-base font-extrabold text-slate-900 leading-snug">
+                      <h4 className="text-base font-black text-slate-900 leading-snug">
                         {place.name}
                       </h4>
 
-                      {/* Schedule Clock Pill: Arrival -> Visit -> Departure */}
+                      {/* Timeline Schedule Pill */}
                       {stopSched && (
-                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs font-semibold text-slate-700 pt-0.5">
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 pt-0.5">
                           <span className="px-2 py-0.5 rounded-md bg-slate-100 font-bold text-slate-800">
-                            🕒 Arrive: {stopSched.arrivalTimeStr}
+                            {stopSched.arrivalTimeStr} Arrive
                           </span>
-                          <span>→</span>
-                          <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 font-bold border border-amber-200/60" title={stopSched.durationSourceLabel}>
-                            ⏳ Visit: {stopSched.visitDurationDisplay}
-                            {stopSched.isFallbackEstimate && (
-                              <span className="text-[9px] font-normal text-amber-700 ml-1">(est.)</span>
-                            )}
+                          <span className="text-slate-400">·</span>
+                          <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 font-bold border border-amber-200/60">
+                            {stopSched.visitDurationDisplay} visit
                           </span>
-                          <span>→</span>
-                          <span className="px-2 py-0.5 rounded-md bg-slate-100 font-bold text-slate-800">
-                            🛫 Depart: {stopSched.departureTimeStr}
+                          <span className="text-slate-400">·</span>
+                          <span className="text-slate-500 text-[11px]">
+                            {stopSched.departureTimeStr} Depart
                           </span>
                         </div>
                       )}
-
-                      <div className="flex items-center space-x-3 text-xs text-slate-500">
-                        <span>
-                          {place.rating !== undefined 
-                            ? `⭐ ${place.rating} ${place.reviewCount ? `(${place.reviewCount.toLocaleString()})` : ''}` 
-                            : '⭐ Unrated'}
-                        </span>
-                        <span>•</span>
-                        <span className="text-[11px] text-slate-400">
-                          {stopSched?.durationSourceLabel || 'Visit estimate'}
-                        </span>
-                      </div>
                     </div>
                   </div>
 
-                  {/* Ordering & Remove Controls */}
+                  {/* Actions: View Details, Re-order, Remove */}
                   <div className="flex items-center space-x-1.5 self-end sm:self-center shrink-0">
                     <button
+                      type="button"
                       onClick={() => onViewPlaceDetails(place)}
-                      className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                      className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200 transition-colors cursor-pointer"
                     >
-                      Details
+                      View Details
                     </button>
 
                     <button
+                      type="button"
                       onClick={() => moveStopUp(index)}
                       disabled={isFirst}
-                      title="Move earlier in route"
+                      title="Move up"
                       className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     >
                       <ChevronUp className="w-4 h-4" />
                     </button>
 
                     <button
+                      type="button"
                       onClick={() => moveStopDown(index)}
                       disabled={isLast}
-                      title="Move later in route"
+                      title="Move down"
                       className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
                     >
                       <ChevronDown className="w-4 h-4" />
                     </button>
 
                     <button
+                      type="button"
                       onClick={() => removeFromTrip(place.id)}
                       title="Remove from trip"
                       className="p-1.5 rounded-lg border border-rose-200 hover:bg-rose-50 text-rose-600 transition-colors cursor-pointer"
@@ -1235,48 +1078,186 @@ export const TripRouteView: React.FC<TripRouteViewProps> = ({
           );
         })}
 
-        {/* Phase 10: Trip Complete Summary Node */}
-        {tripPlaces.length > 0 && (
-          <div className="relative pl-10 sm:pl-12 pt-2">
-            <div className="absolute left-0 top-3 w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs ring-4 ring-emerald-100 shadow-sm">
-              🏁
-            </div>
-            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <span className="font-extrabold text-slate-900 block">
-                  Trip Completed at ~{schedule.endTimeStr}
+        {/* END Node */}
+        <div className="relative pl-9 sm:pl-11 pt-1">
+          <div className="absolute left-0 top-2.5 w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs ring-4 ring-emerald-100 shadow-2xs">
+            🏁
+          </div>
+
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-black">
+                  RETURN
                 </span>
-                <span className="text-slate-500 text-[11px]">
-                  Total estimated door-to-door duration: {formattedTotalTime} (including {schedule.bufferMin}m buffer)
+                <span className="font-bold text-slate-700">
+                  ~{schedule.endTimeStr}
                 </span>
               </div>
-              <span className={`px-2.5 py-1 rounded-lg font-extrabold text-[11px] self-start sm:self-auto ${
-                feasibility.status === 'feasible'
-                  ? 'bg-emerald-100 text-emerald-900'
-                  : feasibility.status === 'tight'
-                  ? 'bg-amber-100 text-amber-900'
-                  : 'bg-rose-100 text-rose-900'
-              }`}>
-                {feasibility.statusLabel}
-              </span>
+              <h4 className="text-sm font-extrabold text-slate-900 mt-1">
+                Trip Complete
+              </h4>
             </div>
-          </div>
-        )}
-
-        {/* Clear Notice / Legend */}
-        <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-400">
-          <div className="flex items-center space-x-1.5">
-            <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            <span>
-              {tripRoute.isRoadNetwork
-                ? 'Real street route geometry and road distances provided by Open Source Routing Machine (OSRM) + OpenStreetMap.'
-                : 'Distances calculated from GPS coordinates via Haversine great-circle formula. Transit fares & travel times are urban traffic model estimates.'}
+            <span className="text-[11px] text-slate-500 font-medium">
+              {tripPlaces.length} places visited
             </span>
           </div>
-          <span className="font-semibold text-slate-500 shrink-0">
-            {tripPlaces.length} destination stops planned
-          </span>
         </div>
+      </div>
+
+      {/* 7. WHY THIS ORDER? (Friendly Checklist) */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <span className="text-base">💡</span>
+            <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
+              WHY THIS ORDER?
+            </h4>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowWhyOrder(!showWhyOrder)}
+            className="text-xs font-bold text-sky-700 hover:text-sky-900 flex items-center space-x-1 cursor-pointer"
+          >
+            <span>{showWhyOrder ? 'Less details' : 'Learn more'}</span>
+            {showWhyOrder ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+
+        {/* Friendly Checklist */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-xs text-slate-700">
+          {friendlyOrderPoints.map((point, idx) => (
+            <div key={idx} className="flex items-center space-x-2">
+              <span className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-[10px] shrink-0">
+                ✓
+              </span>
+              <span className="font-medium">{point}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Expanded Narrative */}
+        {showWhyOrder && (
+          <div className="p-3.5 rounded-2xl bg-sky-50/60 border border-sky-100 text-xs text-slate-700 space-y-2 mt-2 animate-fadeIn">
+            <p className="leading-relaxed">
+              {itineraryExplanation.overallReason}
+            </p>
+            {itineraryExplanation.efficiencyReason && (
+              <p className="text-emerald-800 font-semibold">
+                {itineraryExplanation.efficiencyReason}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 8. AI TRAVEL GUIDE ENTRY POINT (Ask about this trip) */}
+      <div className="bg-gradient-to-r from-sky-50 to-indigo-50/60 rounded-3xl border border-sky-100 p-5 shadow-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 rounded-xl bg-sky-600 text-white flex items-center justify-center shadow-xs">
+              <Bot className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-sm font-black text-slate-900">
+                Ask about this trip
+              </h4>
+              <p className="text-[11px] text-slate-500 font-medium">
+                Get grounded answers about your route, timings, costs, and weather
+              </p>
+            </div>
+          </div>
+
+          {onNavigateToAI && (
+            <button
+              onClick={() => onNavigateToAI()}
+              className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer"
+            >
+              Open AI Guide
+            </button>
+          )}
+        </div>
+
+        {/* Prompt Pills */}
+        <div className="flex flex-wrap gap-2 pt-1">
+          {AI_QUICK_QUESTIONS.map((question) => (
+            <button
+              key={question}
+              type="button"
+              onClick={() => onNavigateToAI?.(question)}
+              className="px-3 py-1.5 bg-white hover:bg-sky-50 text-slate-700 hover:text-sky-900 border border-sky-200/80 rounded-xl text-xs font-semibold transition-all shadow-2xs cursor-pointer flex items-center space-x-1.5 group"
+            >
+              <span>{question}</span>
+              <span className="text-sky-500 group-hover:translate-x-0.5 transition-transform">→</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 9. ADVANCED DETAILS (Hidden by default) */}
+      <div className="pt-1 text-center">
+        <button
+          type="button"
+          onClick={() => setShowAdvancedDetails(!showAdvancedDetails)}
+          className="text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors cursor-pointer inline-flex items-center space-x-1"
+        >
+          <span>{showAdvancedDetails ? 'Hide calculation details' : 'Route & transit calculation details'}</span>
+          {showAdvancedDetails ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        </button>
+
+        {showAdvancedDetails && (
+          <div className="mt-3 p-4 sm:p-5 rounded-3xl bg-slate-50 border border-slate-200 text-left text-xs text-slate-600 space-y-3 animate-fadeIn">
+            <div className="flex items-center justify-between font-extrabold text-slate-900">
+              <span className="flex items-center space-x-1.5">
+                <Info className="w-3.5 h-3.5 text-sky-600" />
+                <span>Route &amp; Fare Calculation Details</span>
+              </span>
+              <span className="text-[10px] font-medium bg-white px-2 py-0.5 rounded border border-slate-200">
+                {tripRoute.isRoadNetwork ? 'Road Network Geometry' : 'Direct Distance'}
+              </span>
+            </div>
+
+            <div className="space-y-1.5 leading-relaxed text-[11px]">
+              <div>• <strong>Route Calculation:</strong> {tripRoute.isRoadNetwork ? 'Measured via real road network paths' : 'Measured via direct coordinate distance'}</div>
+              <div>• <strong>Active Transit Mode:</strong> {activeTransport.toUpperCase()} ({tripRoute.selectedModeTimeDisplay})</div>
+              <div>• <strong>Recommended Transport:</strong> {recommendedMode.toUpperCase()} ({recommendedDetails.label})</div>
+              <div>• <strong>Total Multi-Leg Travel Distance:</strong> {tripRoute.totalDistanceKm} km across {tripRoute.legs.length} leg(s)</div>
+              <div>• <strong>Schedule Margin:</strong> {feasibility.status === 'exceeded' ? `+${feasibility.exceededMinutes}m Over available window` : `${feasibility.remainingMinutes}m Available`} vs {preferences.availableHours}h limit.</div>
+            </div>
+
+            {/* Turn by turn maneuvers if available */}
+            {tripRoute.legs.some((l) => l.maneuvers && l.maneuvers.length > 0) && (
+              <div className="pt-2 border-t border-slate-200 space-y-2">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Turn-by-Turn Leg Navigation:
+                </span>
+                {tripRoute.legs.map((leg, lIdx) => (
+                  <div key={lIdx} className="space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => toggleManeuversExpand(lIdx)}
+                      className="text-[11px] font-bold text-sky-700 hover:text-sky-900 flex items-center space-x-1"
+                    >
+                      <span>Leg {lIdx + 1}: {leg.fromName} → {leg.toName} ({leg.maneuvers?.length || 0} steps)</span>
+                      {expandedManeuversLegIndex === lIdx ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    </button>
+
+                    {expandedManeuversLegIndex === lIdx && leg.maneuvers && (
+                      <div className="p-2.5 bg-white rounded-xl border border-slate-200 max-h-36 overflow-y-auto space-y-1">
+                        {leg.maneuvers.map((m, mIdx) => (
+                          <div key={mIdx} className="text-[10px] text-slate-600 flex items-start space-x-1.5">
+                            <span className="font-bold text-slate-400">{mIdx + 1}.</span>
+                            <span>{m.instruction}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

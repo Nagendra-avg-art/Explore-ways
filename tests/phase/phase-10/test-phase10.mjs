@@ -8,13 +8,13 @@ import {
   generateItineraryExplanation,
   addMinutesToTimeString,
   computeTripBufferMinutes
-} from './client/src/services/itineraryEngineService.ts';
+} from '../../../client/src/services/itineraryEngineService.ts';
 import { 
   calculateTripRoute, 
   optimizeRouteNearestNeighbor,
   calculateHaversineDistanceKm 
-} from './client/src/services/routingService.ts';
-import { DEMO_PLACES } from './client/src/data/demoPlaces.ts';
+} from '../../../client/src/services/routingService.ts';
+import { DEMO_PLACES } from '../../../client/src/data/demoPlaces.ts';
 
 const BASE_URL = 'http://localhost:5000/api';
 

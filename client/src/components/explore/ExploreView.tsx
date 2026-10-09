@@ -11,10 +11,12 @@ import {
 } from 'lucide-react';
 import { CategoryPills } from '../common/CategoryPills';
 import { PlaceCard } from './PlaceCard';
+import { WeatherCard } from '../weather/WeatherCard';
 import { CategoryId, Place, SortOption } from '../../types/travel';
 import { useLocation } from '../../context/LocationContext';
 import { usePreferences } from '../../context/PreferencesContext';
 import { usePlaces } from '../../context/PlacesContext';
+import { useWeather } from '../../context/WeatherContext';
 import { scorePlace } from '../../services/recommendationEngine';
 
 interface ExploreViewProps {
@@ -32,9 +34,10 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
   savedPlaceIds,
   onToggleSave,
 }) => {
-  const { location } = useLocation();
+  const { location, setIsLocationModalOpen } = useLocation();
   const { preferences, updatePreferences, setIsPreferencesModalOpen } = usePreferences();
-  const { places: availablePlaces, isLiveDiscovery, sourceName } = usePlaces();
+  const { places: availablePlaces, isLiveDiscovery } = usePlaces();
+  const { weather } = useWeather();
 
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -64,7 +67,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
   const processedPlaces = useMemo(() => {
     // 1. Score, filter and rank all candidate places using multi-factor engine
     let result = availablePlaces.map((place) => {
-      const scored = scorePlace(place, location.lat, location.lon, preferences);
+      const scored = scorePlace(place, location.lat, location.lon, preferences, weather);
       return {
         ...place,
         distanceKm: scored.distanceKm,
@@ -119,7 +122,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
     }
 
     return result;
-  }, [selectedCategory, searchQuery, distanceFilter, ratingFilter, openNowOnly, sortBy, location, preferences]);
+  }, [selectedCategory, searchQuery, distanceFilter, ratingFilter, openNowOnly, sortBy, location, preferences, weather]);
 
   const setDistanceFilter = (val: DistanceFilter) => {
     updatePreferences({ maxDistanceKm: val === 'all' ? null : parseFloat(val) });
@@ -177,6 +180,11 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
           </button>
         </div>
 
+        {/* WEATHER SUMMARY (Phase 13) */}
+        <div id="explore-weather-summary" className="animate-fadeIn">
+          <WeatherCard />
+        </div>
+
         {/* Search Bar & Sort Row */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           {/* Search Input */}
@@ -225,7 +233,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
               aria-label="Sort destinations"
               className="bg-transparent font-bold text-slate-900 focus:outline-none cursor-pointer"
             >
-              <option value="recommended">Best Match (AI Ranked)</option>
+              <option value="recommended">Best Match</option>
               <option value="distance">Distance (Nearest)</option>
               <option value="rating">Rating (Highest)</option>
             </select>
@@ -351,7 +359,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
             isLiveDiscovery ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
           }`}>
-            {isLiveDiscovery ? `🟢 Live (${sourceName})` : '🔶 Curated Demo'}
+            {isLiveDiscovery ? '🟢 Live Nearby' : '🔶 Curated Highlights'}
           </span>
         </div>
         {sortBy !== 'recommended' && (
@@ -379,16 +387,24 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
           <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
             <Compass className="w-6 h-6" />
           </div>
-          <h3 className="font-bold text-slate-900 text-base">No destinations match these criteria</h3>
+          <h3 className="font-bold text-slate-900 text-base">No destinations found nearby</h3>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            Try expanding your distance radius, lowering the rating filter, or turning off the "Open Now" constraint.
+            We couldn't find any places matching your current filters or selected location. You can adjust your search criteria or switch to another city.
           </p>
-          <button
-            onClick={resetAllFilters}
-            className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-semibold cursor-pointer"
-          >
-            Reset All Filters
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <button
+              onClick={resetAllFilters}
+              className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-semibold cursor-pointer transition-colors shadow-sm"
+            >
+              Reset Filters
+            </button>
+            <button
+              onClick={() => setIsLocationModalOpen(true)}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+            >
+              Change Location
+            </button>
+          </div>
         </div>
       )}
 
